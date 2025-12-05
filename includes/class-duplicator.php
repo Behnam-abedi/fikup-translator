@@ -40,13 +40,22 @@ class Fikup_Poly_Duplicator {
 
         if ( $new_post_id ) {
             $meta_keys = get_post_custom_keys( $post_id );
+            
+            // لیست سیاه: متاهایی که نباید کپی شوند
+            $exclude_meta = [
+                '_edit_lock', 
+                '_edit_last', 
+                '_woodmart_header_id', // <--- هدر فارسی را کپی نکن!
+                '_woodmart_whb_header' // <--- تنظیمات بیلدر هدر را هم کپی نکن
+            ];
+
             if ( ! empty( $meta_keys ) ) {
                 foreach ( $meta_keys as $key ) {
-                    if ( in_array( $key, ['_edit_lock', '_edit_last'] ) ) continue;
+                    if ( in_array( $key, $exclude_meta ) ) continue;
+                    
                     $values = get_post_custom_values( $key, $post_id );
                     foreach ( $values as $value ) {
                         $value = maybe_unserialize( $value );
-                        // Fix Elementor JSON escaping
                         if ( is_string( $value ) ) {
                             $value = wp_slash( $value ); 
                         }
