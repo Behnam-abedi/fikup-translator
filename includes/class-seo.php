@@ -2,14 +2,12 @@
 defined( 'ABSPATH' ) || exit;
 
 class Fikup_Poly_SEO {
-
     public function __construct() {
         add_action( 'wp_head', [ $this, 'output_hreflangs' ] );
     }
 
     public function output_hreflangs() {
         if ( ! is_single() && ! is_page() ) return;
-
         $post_id = get_the_ID();
         $group_id = get_post_meta( $post_id, '_fikup_translation_group', true );
 
@@ -23,12 +21,9 @@ class Fikup_Poly_SEO {
             ));
 
             foreach ( $results as $row ) {
-                $lang = $row->meta_value; // fa or en
+                $lang = $row->meta_value;
                 $url  = get_permalink( $row->post_id );
-                
-                // تبدیل fa به fa-IR و en به en-US برای استاندارد گوگل
                 $code = ( $lang == 'en' ) ? 'en-US' : 'fa-IR';
-                
                 echo '<link rel="alternate" hreflang="' . esc_attr( $code ) . '" href="' . esc_url( $url ) . '" />' . "\n";
             }
         }
