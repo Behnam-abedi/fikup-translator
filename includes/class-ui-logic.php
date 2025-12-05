@@ -17,8 +17,8 @@ class Fikup_Poly_UI_Logic {
             }
         }
 
-        // 1. هوک تغییر هدر وودمارت (مهم‌ترین بخش)
-        add_filter( 'woodmart_header_id', [ $this, 'swap_header' ] );
+        // 1. هوک تغییر هدر وودمارت (با اولویت بسیار بالا)
+        add_filter( 'woodmart_header_id', [ $this, 'swap_header' ], 99999 );
 
         // 2. ترجمه کلمات
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
@@ -31,19 +31,25 @@ class Fikup_Poly_UI_Logic {
      * سوئیچ کردن هدر در حالت انگلیسی
      */
     public function swap_header( $id ) {
-        // اگر سایت در حالت انگلیسی است
-        if ( Fikup_Poly_Language::is_english() ) {
-            
-            // آی‌دی هدر انگلیسی را از تنظیمات بگیر
+        // تشخیص زبان: هم از طریق کلاس اصلی چک می‌کنیم، هم مستقیم از URL برای اطمینان 100%
+        $is_en = Fikup_Poly_Language::is_english();
+        
+        if ( ! $is_en ) {
+            // چک کردن دستی URL برای مواقعی که هوک‌های وردپرس هنوز لود نشده‌اند
+            if ( strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
+                $is_en = true;
+            }
+        }
+
+        if ( $is_en ) {
             $en_header_id = get_option( 'fikup_woodmart_header_id' );
             
-            // اگر تنظیم شده بود، آن را برگردان تا وودمارت آن را لود کند
+            // مطمئن شویم که ID خالی نیست
             if ( ! empty( $en_header_id ) ) {
                 return $en_header_id;
             }
         }
         
-        // در غیر این صورت همان هدر پیش‌فرض (فارسی) را برگردان
         return $id;
     }
 
