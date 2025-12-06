@@ -30,7 +30,7 @@ class Fikup_Poly_Settings {
         if ( ! current_user_can( 'manage_options' ) ) return;
         
         $screen = get_current_screen();
-        if ( strpos( $screen->id, 'fikup' ) === false && strpos( $screen->id, 'update' ) === false && strpos( $screen->id, 'themes' ) === false ) {
+        if ( ! $screen || ( strpos( $screen->id, 'fikup' ) === false && strpos( $screen->id, 'update' ) === false && strpos( $screen->id, 'themes' ) === false ) ) {
              return;
         }
 
@@ -56,7 +56,30 @@ class Fikup_Poly_Settings {
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
         // --- گروه ۲: ترجمه کلمات (Strings) ---
-        register_setting( 'fikup_poly_strings_group', 'fikup_string_translations', [ 'type' => 'array' ] );
+        // نکته مهم: اضافه کردن تابع sanitize_translations برای جلوگیری از پاک شدن اطلاعات
+        register_setting( 'fikup_poly_strings_group', 'fikup_string_translations', [ 
+            'type' => 'array',
+            'sanitize_callback' => [ $this, 'sanitize_translations' ]
+        ] );
+    }
+
+    /**
+     * این تابع حیاتی است: اطلاعات ورودی را تمیز می‌کند و سطرهای خالی را دور می‌ریزد
+     */
+    public function sanitize_translations( $input ) {
+        $clean = [];
+        if ( is_array( $input ) ) {
+            foreach ( $input as $item ) {
+                // فقط اگر هم کلمه اصلی و هم ترجمه پر شده باشند ذخیره کن
+                if ( ! empty( $item['org'] ) && ! empty( $item['trans'] ) ) {
+                    $clean[] = [
+                        'org'   => sanitize_text_field( $item['org'] ),
+                        'trans' => sanitize_text_field( $item['trans'] )
+                    ];
+                }
+            }
+        }
+        return $clean;
     }
 
     public function render_settings_page() {
@@ -73,10 +96,10 @@ class Fikup_Poly_Settings {
             <form method="post" action="options.php">
                 <?php 
                 if ( $active_tab == 'general' ) {
-                    settings_fields( 'fikup_poly_general_group' ); // نام گروه جدید برای تب عمومی
+                    settings_fields( 'fikup_poly_general_group' );
                     $this->render_general_tab();
                 } elseif ( $active_tab == 'strings' ) {
-                    settings_fields( 'fikup_poly_strings_group' ); // نام گروه جدید برای تب ترجمه
+                    settings_fields( 'fikup_poly_strings_group' );
                     $this->render_strings_tab();
                 }
                 
@@ -136,11 +159,12 @@ class Fikup_Poly_Settings {
         <p>ترجمه کلمات سیستمی که دسترسی به ویرایش آن‌ها ندارید (مثل متن دکمه‌ها).</p>
         <div id="strings-wrapper">
             <?php 
-            if ( ! empty( $translations ) ) {
+            if ( ! empty( $translations ) && is_array( $translations ) ) {
                 foreach ( $translations as $i => $item ) {
                     if(!empty($item['org'])) $this->render_string_row( $i, $item['org'], $item['trans'] );
                 }
             }
+            // سطر خالی برای اضافه کردن جدید (همیشه آخر لیست باشد)
             $this->render_string_row( 9999, '', '' );
             ?>
         </div>
