@@ -5,6 +5,7 @@ class Fikup_Poly_UI_Logic {
 
     private $string_translations;
     private $en_header_id;
+    private $en_footer_id; // <--- متغیر جدید برای فوتر
 
     public function __construct() {
         // لود ترجمه‌ها
@@ -18,15 +19,17 @@ class Fikup_Poly_UI_Logic {
             }
         }
 
-        // کش کردن ID هدر انگلیسی برای استفاده در توابع
+        // کش کردن ID ها
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
+        $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' ); // <--- دریافت ID فوتر
 
-        // 1. هوک استاندارد وودمارت (برای صفحات عمومی مثل آرشیو/سرچ)
+        // 1. هوک استاندارد وودمارت (Global)
         add_filter( 'woodmart_header_id', [ $this, 'swap_header_global' ], 99999 );
+        add_filter( 'woodmart_footer_id', [ $this, 'swap_footer_global' ], 99999 ); // <--- هوک جدید فوتر
 
         // 2. [تیر خلاص] هوک متا دیتا (برای صفحات تکی و محصولات)
         // این هوک باعث می‌شود تنظیمات داخلی صفحه نادیده گرفته شود
-        add_filter( 'get_post_metadata', [ $this, 'force_header_via_meta' ], 10, 4 );
+        add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
 
         // 3. ترجمه کلمات
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
@@ -46,17 +49,37 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * روش 2: تغییر هدر با دستکاری متا دیتا (Meta Override)
+     * روش 1 (فوتر): تغییر فوتر برای کل سایت (Global)
+     */
+    public function swap_footer_global( $id ) {
+        if ( $this->is_english_context() && ! empty( $this->en_footer_id ) ) {
+            return $this->en_footer_id;
+        }
+        return $id;
+    }
+
+    /**
+     * روش 2: تغییر هدر و فوتر با دستکاری متا دیتا (Meta Override)
      * وقتی وودمارت سعی میکند تنظیمات صفحه را بخواند، ما ID انگلیسی را به او میدهیم.
      */
-    public function force_header_via_meta( $value, $object_id, $meta_key, $single ) {
+    public function force_layout_via_meta( $value, $object_id, $meta_key, $single ) {
         // فقط در فرانت‌اند اجرا شود
         if ( is_admin() ) return $value;
 
-        // فقط اگر کلید درخواستی _woodmart_header_id باشد
+        // اگر انگلیسی نیستیم هیچ کاری نکن
+        if ( ! $this->is_english_context() ) return $value;
+
+        // تغییر هدر
         if ( $meta_key === '_woodmart_header_id' ) {
-            if ( $this->is_english_context() && ! empty( $this->en_header_id ) ) {
+            if ( ! empty( $this->en_header_id ) ) {
                 return $this->en_header_id;
+            }
+        }
+
+        // تغییر فوتر (جدید)
+        if ( $meta_key === '_woodmart_footer_id' ) {
+            if ( ! empty( $this->en_footer_id ) ) {
+                return $this->en_footer_id;
             }
         }
 

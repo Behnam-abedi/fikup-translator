@@ -21,8 +21,9 @@ class Fikup_Poly_Settings {
     }
 
     public function register_settings() {
-        // فقط تنظیمات ضروری
+        // ثبت تنظیمات
         register_setting( 'fikup_poly_group', 'fikup_woodmart_header_id' );
+        register_setting( 'fikup_poly_group', 'fikup_woodmart_footer_id' ); // <--- اضافه شده
         register_setting( 'fikup_poly_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_group', 'fikup_custom_css_en' );
         register_setting( 'fikup_poly_group', 'fikup_string_translations', [ 'type' => 'array' ] );
@@ -35,7 +36,7 @@ class Fikup_Poly_Settings {
             <h1>تنظیمات سیستم چندزبانه Fikup</h1>
             
             <h2 class="nav-tab-wrapper">
-                <a href="?page=fikup-poly&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">تنظیمات اصلی (هدر & سینک)</a>
+                <a href="?page=fikup-poly&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">تنظیمات اصلی (هدر & فوتر & سینک)</a>
                 <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">ترجمه کلمات</a>
             </h2>
 
@@ -66,11 +67,21 @@ class Fikup_Poly_Settings {
                     <p class="description">
                         وارد <strong>WoodMart > Header Builder</strong> شوید. هدر انگلیسی خود را بسازید. 
                         آی‌دی آن را (مثلاً <code>header_123456</code>) اینجا وارد کنید.
-                        <br>
-                        <span style="color: green;">نکته:</span> در تنظیمات هدر ساز، المان منو را روی "منوی انگلیسی" ست کنید. پلاگین به طور خودکار کل این هدر را لود می‌کند.
                     </p>
                 </td>
             </tr>
+
+            <tr>
+                <th scope="row">شناسه فوتر انگلیسی (HTML Block)</th>
+                <td>
+                    <input type="text" name="fikup_woodmart_footer_id" value="<?php echo esc_attr( get_option('fikup_woodmart_footer_id') ); ?>" class="regular-text">
+                    <p class="description">
+                        وارد <strong>HTML Blocks</strong> شوید و یک فوتر انگلیسی بسازید. 
+                        آی‌دی پست آن (مثلاً <code>458</code>) را اینجا وارد کنید.
+                    </p>
+                </td>
+            </tr>
+
             <tr>
                 <th scope="row">هماهنگ‌سازی (Sync)</th>
                 <td>
