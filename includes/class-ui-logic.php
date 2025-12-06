@@ -34,7 +34,7 @@ class Fikup_Poly_UI_Logic {
         // 4. ترجمه کلمات
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
         
-        // 5. CSS و فونت انگلیسی (اصلاح شده)
+        // 5. CSS و فونت انگلیسی (تقویت شده برای دکمه‌ها)
         add_action( 'wp_head', [ $this, 'print_custom_css' ] );
 
         // 6. غیرفعال کردن ترجمه فارسی قالب
@@ -89,69 +89,72 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * چاپ CSS و فونت انگلیسی (نسخه اصلاح شده برای آیکون‌ها)
+     * چاپ CSS و فونت انگلیسی (نسخه نهایی و کامل)
      */
     public function print_custom_css() {
         if ( $this->is_english_context() ) {
-            // 1. لود فونت Roboto
             echo '<link rel="preconnect" href="https://fonts.googleapis.com">';
             echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
             echo '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">';
             
             echo '<style>';
             echo '
-                /* تنظیم فونت کلی بدنه */
+                /* تنظیم فونت کلی */
                 body.fikup-en-mode {
                     font-family: "Roboto", sans-serif !important;
                 }
                 
-                /* فقط روی تگ‌های متنی اصلی اعمال شود.
-                   تگ‌های span, i, b را حذف کردیم تا آیکون‌ها خراب نشوند.
+                /* لیست سفید: المان‌هایی که حتماً باید فونت انگلیسی بگیرند 
+                   (شامل تمام دکمه‌های خاص وودمارت و ووکامرس)
                 */
                 body.fikup-en-mode h1, body.fikup-en-mode h2, body.fikup-en-mode h3, 
                 body.fikup-en-mode h4, body.fikup-en-mode h5, body.fikup-en-mode h6,
                 body.fikup-en-mode p, body.fikup-en-mode a, body.fikup-en-mode li, 
-                body.fikup-en-mode button, body.fikup-en-mode input, body.fikup-en-mode textarea, 
-                body.fikup-en-mode select, body.fikup-en-mode .woodmart-entry-content {
+                body.fikup-en-mode input, body.fikup-en-mode textarea, body.fikup-en-mode select,
+                
+                /* دکمه‌های وودمارت و ووکامرس */
+                body.fikup-en-mode .btn, 
+                body.fikup-en-mode .button, 
+                body.fikup-en-mode button,
+                body.fikup-en-mode .wd-btn,
+                body.fikup-en-mode input[type="submit"],
+                body.fikup-en-mode input[type="button"],
+                body.fikup-en-mode input[type="reset"],
+                body.fikup-en-mode .added_to_cart,
+                body.fikup-en-mode .checkout-button,
+                body.fikup-en-mode .single_add_to_cart_button,
+                body.fikup-en-mode .woodmart-entry-content {
                     font-family: "Roboto", sans-serif !important;
                 }
                 
-                /* --- لیست سفید آیکون‌ها (جلوگیری از تغییر فونت) --- */
-                
-                /* 1. آیکون‌های وودمارت */
+                /* لیست سیاه: المان‌هایی که نباید فونتشان عوض شود (آیکون‌ها) 
+                */
                 body.fikup-en-mode [class*="wd-icon-"],
                 body.fikup-en-mode .woodmart-font,
                 body.fikup-en-mode .wd-tools-icon,
                 body.fikup-en-mode .wd-cross-icon,
                 body.fikup-en-mode .wd-arrow-inner,
                 body.fikup-en-mode .wd-action-btn,
-                body.fikup-en-mode .social-icon {
-                    font-family: "woodmart-font" !important;
+                body.fikup-en-mode .social-icon,
+                body.fikup-en-mode .fa, 
+                body.fikup-en-mode .fas, 
+                body.fikup-en-mode .far, 
+                body.fikup-en-mode .fab,
+                body.fikup-en-mode .star-rating,
+                body.fikup-en-mode .star-rating span:before,
+                body.fikup-en-mode i[class*="eicon-"] {
+                    font-family: "woodmart-font" !important; 
                 }
-
-                /* 2. آیکون‌های FontAwesome (لایک، اینستاگرام و...) */
-                body.fikup-en-mode .fa, body.fikup-en-mode .fas, body.fikup-en-mode .far, body.fikup-en-mode .fab {
+                /* فیکس برای فونت اوسام */
+                body.fikup-en-mode .fa, body.fikup-en-mode .fas, body.fikup-en-mode .far {
                     font-family: "Font Awesome 5 Free" !important;
                 }
                 body.fikup-en-mode .fab {
                     font-family: "Font Awesome 5 Brands" !important;
                 }
-
-                /* 3. ستاره‌های امتیازدهی (ووکامرس) */
-                body.fikup-en-mode .star-rating {
-                    font-family: "woodmart-font" !important;
-                }
-                body.fikup-en-mode .star-rating span:before {
-                    font-family: "woodmart-font" !important;
-                }
-
-                /* 4. المنتور آیکون */
-                body.fikup-en-mode i[class*="eicon-"] {
-                    font-family: "eicons" !important;
-                }
             ';
             
-            // CSS اضافی از تنظیمات
+            // CSS اضافی کاربر
             $css = get_option( 'fikup_custom_css_en' );
             if ( ! empty( $css ) ) {
                 echo wp_strip_all_tags( $css );
