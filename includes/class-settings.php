@@ -27,13 +27,8 @@ class Fikup_Poly_Settings {
      * نمایش هشدار زرد رنگ در بالای پنل مدیریت
      */
     public function render_admin_notice() {
-        // فقط به مدیر کل نمایش داده شود
-        if ( ! current_user_can( 'manage_options' ) ) {
-            return;
-        }
+        if ( ! current_user_can( 'manage_options' ) ) return;
         
-        // بررسی اینکه آیا در صفحه پلاگین هستیم یا خیر (اختیاری: برای اینکه همه جا مزاحم نباشد)
-        // اگر می‌خواهید همیشه باشد، شرط screen را بردارید.
         $screen = get_current_screen();
         if ( strpos( $screen->id, 'fikup' ) === false && strpos( $screen->id, 'update' ) === false && strpos( $screen->id, 'themes' ) === false ) {
              return;
@@ -55,14 +50,12 @@ class Fikup_Poly_Settings {
 
     public function register_settings() {
         // --- گروه ۱: تنظیمات اصلی (General) ---
-        // نام گروه را تغییر دادیم به fikup_poly_general_group
         register_setting( 'fikup_poly_general_group', 'fikup_woodmart_header_id' );
         register_setting( 'fikup_poly_general_group', 'fikup_woodmart_footer_id' );
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
         // --- گروه ۲: ترجمه کلمات (Strings) ---
-        // نام گروه را تغییر دادیم به fikup_poly_strings_group
         register_setting( 'fikup_poly_strings_group', 'fikup_string_translations', [ 'type' => 'array' ] );
     }
 
@@ -79,12 +72,11 @@ class Fikup_Poly_Settings {
 
             <form method="post" action="options.php">
                 <?php 
-                // اینجا بسته به تب فعال، گروه تنظیمات مناسب را صدا می‌زنیم
                 if ( $active_tab == 'general' ) {
-                    settings_fields( 'fikup_poly_general_group' ); // <--- فقط گروه عمومی
+                    settings_fields( 'fikup_poly_general_group' ); // نام گروه جدید برای تب عمومی
                     $this->render_general_tab();
                 } elseif ( $active_tab == 'strings' ) {
-                    settings_fields( 'fikup_poly_strings_group' ); // <--- فقط گروه ترجمه
+                    settings_fields( 'fikup_poly_strings_group' ); // نام گروه جدید برای تب ترجمه
                     $this->render_strings_tab();
                 }
                 
