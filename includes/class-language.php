@@ -6,47 +6,49 @@ class Fikup_Poly_Language {
     public static $current_lang = 'fa';
 
     public function __construct() {
-        // 1. تغییر زبان هسته وردپرس (بسیار مهم برای LTR شدن)
         add_filter( 'locale', [ $this, 'set_locale' ], 1 );
-
-        // 2. تنظیمات URL و Rewrite
         add_filter( 'query_vars', [ $this, 'register_query_vars' ] );
         add_filter( 'rewrite_rules_array', [ $this, 'add_en_rewrite_rules' ] );
-        
-        // 3. فیلتر لینک‌ها
         add_filter( 'post_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'page_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'post_type_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'term_link', [ $this, 'filter_term_link' ], 10, 2 );
         add_filter( 'home_url', [ $this, 'filter_home_url' ], 10, 2 );
-        
-        // 4. پردازش درخواست
         add_filter( 'request', [ $this, 'intercept_request_for_translation' ] );
         add_filter( 'redirect_canonical', [ $this, 'prevent_canonical_redirect' ], 10, 2 );
-
-        // 5. اضافه کردن کلاس به body برای استایل‌دهی راحت‌تر
         add_filter( 'body_class', [ $this, 'add_body_classes' ] );
     }
 
-    /**
-     * تغییر زبان هسته وردپرس به انگلیسی
-     * این تابع باعث می‌شود is_rtl() مقدار false برگرداند و سایت LTR شود.
-     */
     public function set_locale( $locale ) {
-        // بررسی سریع URL برای تشخیص زبان (چون هنوز query_vars لود نشده)
+        $is_en = false;
+
+        // تشخیص از روی URL
         if ( isset( $_SERVER['REQUEST_URI'] ) ) {
             $path = parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH );
-            // اگر آدرس با /en/ شروع شده یا خود /en است
             if ( strpos( $path, '/en/' ) === 0 || $path === '/en' ) {
-                self::$current_lang = 'en';
-                return 'en_US';
+                $is_en = true;
             }
         }
-
-        // بررسی پارامتر GET برای اطمینان
+        // تشخیص از روی پارامتر
         if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) {
+            $is_en = true;
+        }
+
+        if ( $is_en ) {
             self::$current_lang = 'en';
+            
+            // ست کردن کوکی برای استفاده در درخواست‌های بعدی و آژاکس
+            if ( ! is_admin() && ( ! isset( $_COOKIE['fikup_lang'] ) || $_COOKIE['fikup_lang'] !== 'en' ) ) {
+                setcookie( 'fikup_lang', 'en', time() + 3600 * 24 * 30, '/' );
+                $_COOKIE['fikup_lang'] = 'en';
+            }
             return 'en_US';
+        } else {
+            // اگر انگلیسی نیست، کوکی را به فارسی برگردان
+            if ( ! is_admin() && isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
+                setcookie( 'fikup_lang', 'fa', time() + 3600 * 24 * 30, '/' );
+                $_COOKIE['fikup_lang'] = 'fa';
+            }
         }
 
         return $locale;
@@ -55,24 +57,11 @@ class Fikup_Poly_Language {
     public function add_body_classes( $classes ) {
         if ( self::$current_lang === 'en' ) {
             $classes[] = 'fikup-en-mode';
-            // حذف کلاس rtl اگر اشتباهاً اضافه شده باشد
-            $key = array_search( 'rtl', $classes );
-            if ( false !== $key ) {
-                unset( $classes[ $key ] );
-            }
-            // اضافه کردن کلاس ltr برای اطمینان
             $classes[] = 'ltr';
+            $key = array_search( 'rtl', $classes );
+            if ( false !== $key ) unset( $classes[ $key ] );
         }
         return $classes;
-    }
-
-    // --- بقیه توابع بدون تغییر ---
-
-    public function prevent_canonical_redirect( $redirect_url, $requested_url ) {
-        if ( strpos( $requested_url, '/en/' ) !== false || get_query_var( 'lang' ) === 'en' ) {
-            return false;
-        }
-        return $redirect_url;
     }
 
     public function register_query_vars( $vars ) {
@@ -92,8 +81,7 @@ class Fikup_Poly_Language {
 
     public function intercept_request_for_translation( $vars ) {
         if ( isset( $vars['lang'] ) && $vars['lang'] === 'en' ) {
-            self::$current_lang = 'en'; // اطمینان مجدد
-            
+            self::$current_lang = 'en';
             $target_slug = '';
             $post_type = 'post';
 
@@ -144,6 +132,13 @@ class Fikup_Poly_Language {
         return $vars;
     }
 
+    public function prevent_canonical_redirect( $redirect_url, $requested_url ) {
+        if ( strpos( $requested_url, '/en/' ) !== false || get_query_var( 'lang' ) === 'en' ) {
+            return false;
+        }
+        return $redirect_url;
+    }
+
     public function filter_permalink( $url, $post ) {
         $post = get_post( $post );
         if ( ! $post ) return $url;
@@ -163,24 +158,24 @@ class Fikup_Poly_Language {
 
     public function filter_home_url( $url, $path ) {
         if ( self::$current_lang === 'en' ) {
-            if ( strpos( $url, '/en/' ) === false ) {
-                return rtrim( $url, '/' ) . '/en/';
+            if ( strpos( $url, '/en/' ) !== false ) {
+                return $url;
             }
+            $home_root = rtrim( get_option( 'home' ), '/' );
+            if ( $url === $home_root || $url === $home_root . '/' ) {
+                return $home_root . '/en/';
+            }
+            return str_replace( $home_root, $home_root . '/en', $url );
         }
         return $url;
     }
 
     private function inject_en_prefix( $url ) {
-        $home = home_url();
-        $clean_home = str_replace( ['http://', 'https://'], '', $home );
-        $clean_url  = str_replace( ['http://', 'https://'], '', $url );
-        if ( strpos( $clean_url, $clean_home ) === 0 ) {
-            $path = substr( $clean_url, strlen( $clean_home ) );
-            if ( strpos( $path, '/en/' ) !== 0 ) {
-                return home_url( '/en' . $path );
-            }
+        $home = rtrim( get_option( 'home' ), '/' );
+        if ( strpos( $url, '/en/' ) !== false ) {
+            return $url;
         }
-        return $url;
+        return str_replace( $home, $home . '/en', $url );
     }
 
     public static function is_english() {
