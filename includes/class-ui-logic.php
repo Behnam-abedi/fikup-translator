@@ -8,6 +8,7 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
+        // لود ترجمه‌ها
         $saved_strings = get_option( 'fikup_string_translations', [] );
         $this->string_translations = [];
         if( is_array($saved_strings) ) {
@@ -27,22 +28,22 @@ class Fikup_Poly_UI_Logic {
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
         add_filter( 'gettext_with_context', [ $this, 'translate_strings_context' ], 20, 4 );
-        add_action( 'wp_head', [ $this, 'print_custom_css' ] );
+        add_action( 'wp_head', [ $this, 'print_custom_css_and_js' ] ); // تغییر نام متد
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
     }
 
     private function is_english_context() {
-        // 1. اولویت اول: کوکی (برای آژاکس عالی است)
+        // 1. کوکی (قدرتمندترین روش برای AJAX)
         if ( isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
             return true;
         }
 
-        // 2. URL
+        // 2. آدرس URL
         if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
             return true;
         }
         
-        // 3. کوئری استرینگ
+        // 3. پارامتر GET
         if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) {
             return true;
         }
@@ -52,8 +53,8 @@ class Fikup_Poly_UI_Logic {
             return true;
         }
 
-        // 5. Referer برای آژاکس (پشتیبان کوکی)
-        if ( wp_doing_ajax() ) {
+        // 5. بررسی Referer (برای درخواست‌های AJAX که کوکی ندارند)
+        if ( wp_doing_ajax() || isset( $_GET['wc-ajax'] ) ) {
             if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) {
                 return true;
             }
@@ -95,13 +96,9 @@ class Fikup_Poly_UI_Logic {
         if ( $slug === 'footer_content_type' ) return 'html_block';
         if ( $slug === 'footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
 
-        // پاک کردن مقادیر فارسی هاردکد شده در تنظیمات قالب
         $hardcoded_labels = [
-            'mini_cart_view_cart_text',
-            'mini_cart_checkout_text',
-            'btn_view_cart_text',
-            'btn_checkout_text',
-            'empty_cart_text'
+            'mini_cart_view_cart_text', 'mini_cart_checkout_text',
+            'btn_view_cart_text', 'btn_checkout_text', 'empty_cart_text'
         ];
         if ( in_array( $slug, $hardcoded_labels ) ) return '';
 
@@ -117,15 +114,46 @@ class Fikup_Poly_UI_Logic {
         return $value;
     }
 
-    public function print_custom_css() {
+    /**
+     * چاپ CSS و اسکریپت تنظیم کوکی (اصلاح شده)
+     */
+    public function print_custom_css_and_js() {
         if ( $this->is_english_context() ) {
+            // --- بخش جاوا اسکریپت (جدید) ---
+            // این اسکریپت حتی اگر صفحه کش شده باشد اجرا می‌شود و کوکی زبان را ست می‌کند
+            // تا درخواست‌های بعدی (مثل سبد خرید AJAX) بفهمند که باید انگلیسی باشند.
+            ?>
+            <script>
+            (function() {
+                // تابعی برای ست کردن کوکی
+                function setFikupCookie(name, value, days) {
+                    var expires = "";
+                    if (days) {
+                        var date = new Date();
+                        date.setTime(date.getTime() + (days*24*60*60*1000));
+                        expires = "; expires=" + date.toUTCString();
+                    }
+                    document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+                }
+                
+                // اگر در آدرس /en/ هستیم، کوکی را همین الان ست کن
+                if ( window.location.pathname.indexOf('/en/') === 0 ) {
+                    setFikupCookie('fikup_lang', 'en', 30);
+                }
+            })();
+            </script>
+            <?php
+
+            // --- بخش CSS ---
             echo '<link rel="preconnect" href="https://fonts.googleapis.com">';
             echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
             echo '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">';
             
             echo '<style>';
             echo '
-                body.fikup-en-mode,
+                body.fikup-en-mode {
+                    font-family: "Roboto", sans-serif !important;
+                }
                 body.fikup-en-mode h1, body.fikup-en-mode h2, body.fikup-en-mode h3, 
                 body.fikup-en-mode h4, body.fikup-en-mode h5, body.fikup-en-mode h6,
                 body.fikup-en-mode p, body.fikup-en-mode a, body.fikup-en-mode li, 
@@ -136,12 +164,7 @@ class Fikup_Poly_UI_Logic {
                 body.fikup-en-mode .btn, body.fikup-en-mode .button, body.fikup-en-mode .wd-btn {
                     font-family: "Roboto", sans-serif !important;
                 }
-                
-                body.fikup-en-mode .wd-icon,
-                body.fikup-en-mode span.wd-icon {
-                    font-family: "woodmart-font" !important;
-                }
-
+                body.fikup-en-mode .wd-icon, body.fikup-en-mode span.wd-icon,
                 body.fikup-en-mode [class*="wd-icon-"],
                 body.fikup-en-mode .woodmart-font,
                 body.fikup-en-mode .wd-tools-icon,
@@ -152,7 +175,6 @@ class Fikup_Poly_UI_Logic {
                 body.fikup-en-mode .star-rating span:before {
                     font-family: "woodmart-font" !important;
                 }
-
                 body.fikup-en-mode .fa, body.fikup-en-mode .fas, body.fikup-en-mode .far {
                     font-family: "Font Awesome 5 Free" !important;
                 }
