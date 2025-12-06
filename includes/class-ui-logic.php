@@ -5,7 +5,7 @@ class Fikup_Poly_UI_Logic {
 
     private $string_translations;
     private $en_header_id;
-    private $en_footer_id; // <--- متغیر جدید برای فوتر
+    private $en_footer_id;
 
     public function __construct() {
         // لود ترجمه‌ها
@@ -21,25 +21,28 @@ class Fikup_Poly_UI_Logic {
 
         // کش کردن ID ها
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
-        $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' ); // <--- دریافت ID فوتر
+        $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        // 1. هوک استاندارد وودمارت (Global)
+        // 1. هوک تغییر ID فوتر و هدر (برای اطمینان)
         add_filter( 'woodmart_header_id', [ $this, 'swap_header_global' ], 99999 );
-        add_filter( 'woodmart_footer_id', [ $this, 'swap_footer_global' ], 99999 ); // <--- هوک جدید فوتر
+        add_filter( 'woodmart_footer_id', [ $this, 'swap_footer_global' ], 99999 );
 
-        // 2. [تیر خلاص] هوک متا دیتا (برای صفحات تکی و محصولات)
-        // این هوک باعث می‌شود تنظیمات داخلی صفحه نادیده گرفته شود
+        // 2. [مهم] هوک تغییر تنظیمات اصلی قالب (Options)
+        // این بخش باعث می‌شود اگر فوتر فارسی "ابزارک" بود، در انگلیسی به "HTML Block" تبدیل شود
+        add_filter( 'woodmart_get_opt', [ $this, 'force_theme_options' ], 99999, 2 );
+
+        // 3. [تیر خلاص] هوک متا دیتا (برای صفحات تکی و محصولات)
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
 
-        // 3. ترجمه کلمات
+        // 4. ترجمه کلمات
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
         
-        // 4. CSS
+        // 5. CSS
         add_action( 'wp_head', [ $this, 'print_custom_css' ] );
     }
 
     /**
-     * روش 1: تغییر هدر برای کل سایت (Global)
+     * تغییر ID هدر
      */
     public function swap_header_global( $id ) {
         if ( $this->is_english_context() && ! empty( $this->en_header_id ) ) {
@@ -49,7 +52,7 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * روش 1 (فوتر): تغییر فوتر برای کل سایت (Global)
+     * تغییر ID فوتر
      */
     public function swap_footer_global( $id ) {
         if ( $this->is_english_context() && ! empty( $this->en_footer_id ) ) {
@@ -59,50 +62,62 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * روش 2: تغییر هدر و فوتر با دستکاری متا دیتا (Meta Override)
-     * وقتی وودمارت سعی میکند تنظیمات صفحه را بخواند، ما ID انگلیسی را به او میدهیم.
+     * [بخش جدید] مجبور کردن تنظیمات قالب به استفاده از HTML Block در انگلیسی
      */
-    public function force_layout_via_meta( $value, $object_id, $meta_key, $single ) {
-        // فقط در فرانت‌اند اجرا شود
-        if ( is_admin() ) return $value;
-
-        // اگر انگلیسی نیستیم هیچ کاری نکن
+    public function force_theme_options( $value, $key ) {
         if ( ! $this->is_english_context() ) return $value;
 
-        // تغییر هدر
-        if ( $meta_key === '_woodmart_header_id' ) {
-            if ( ! empty( $this->en_header_id ) ) {
-                return $this->en_header_id;
-            }
+        // اگر قالب پرسید "نوع فوتر چیست؟"، بگو: "HTML Block"
+        if ( $key === 'footer_content_type' ) {
+            return 'html_block';
         }
 
-        // تغییر فوتر (جدید)
-        if ( $meta_key === '_woodmart_footer_id' ) {
-            if ( ! empty( $this->en_footer_id ) ) {
-                return $this->en_footer_id;
-            }
+        // اگر قالب پرسید "کدام بلوک برای فوتر؟"، ID انگلیسی را بده
+        if ( $key === 'footer_html_block' && ! empty( $this->en_footer_id ) ) {
+            return $this->en_footer_id;
         }
 
         return $value;
     }
 
     /**
-     * تابع تشخیص زبان قدرتمند (بدون وابستگی به هوک‌های اولیه)
+     * تغییر تنظیمات صفحه (Meta Override)
+     */
+    public function force_layout_via_meta( $value, $object_id, $meta_key, $single ) {
+        if ( is_admin() ) return $value;
+        if ( ! $this->is_english_context() ) return $value;
+
+        // تغییر هدر
+        if ( $meta_key === '_woodmart_header_id' && ! empty( $this->en_header_id ) ) {
+            return $this->en_header_id;
+        }
+
+        // تغییر فوتر
+        if ( $meta_key === '_woodmart_footer_id' && ! empty( $this->en_footer_id ) ) {
+            return $this->en_footer_id;
+        }
+
+        // اگر صفحه‌ای تنظیم شده بود که از ابزارک استفاده کند، مجبورش کن از HTML Block استفاده کند
+        if ( $meta_key === '_woodmart_footer_content_type' ) {
+            return 'html_block';
+        }
+
+        return $value;
+    }
+
+    /**
+     * تشخیص زبان
      */
     private function is_english_context() {
-        // 1. بررسی کلاس زبان (اگر لود شده باشد)
         if ( class_exists('Fikup_Poly_Language') && Fikup_Poly_Language::is_english() ) {
             return true;
         }
-        // 2. بررسی URL به صورت خام (برای اطمینان 100%)
         if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
             return true;
         }
-        // 3. بررسی کوئری استرینگ
         if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) {
             return true;
         }
-
         return false;
     }
 
