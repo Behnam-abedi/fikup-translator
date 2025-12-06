@@ -6,6 +6,9 @@ class Fikup_Poly_Settings {
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
         add_action( 'admin_init', [ $this, 'register_settings' ] );
+        
+        // نمایش هشدار در کل پنل ادمین
+        add_action( 'admin_notices', [ $this, 'render_admin_notice' ] );
     }
 
     public function add_admin_menu() {
@@ -20,13 +23,47 @@ class Fikup_Poly_Settings {
         );
     }
 
+    /**
+     * نمایش هشدار زرد رنگ در بالای پنل مدیریت
+     */
+    public function render_admin_notice() {
+        // فقط به مدیر کل نمایش داده شود
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+        
+        // بررسی اینکه آیا در صفحه پلاگین هستیم یا خیر (اختیاری: برای اینکه همه جا مزاحم نباشد)
+        // اگر می‌خواهید همیشه باشد، شرط screen را بردارید.
+        $screen = get_current_screen();
+        if ( strpos( $screen->id, 'fikup' ) === false && strpos( $screen->id, 'update' ) === false && strpos( $screen->id, 'themes' ) === false ) {
+             return;
+        }
+
+        ?>
+        <div class="notice notice-warning is-dismissible" style="border-right: 4px solid #f0ad4e;">
+            <p><strong>⚠️ هشدار نگهداری (Fikup Poly):</strong></p>
+            <p>
+                مدیر محترم، سیستم چندزبانه سایت به هسته قالب <strong>WoodMart</strong> متصل است.
+                <br>
+                لطفاً <strong>قبل از آپدیت قالب</strong>، فایل راهنمای فنی (<code>TECHNICAL_GUIDE.txt</code>) در پوشه پلاگین را مطالعه کنید.
+                <br>
+                اگر بعد از آپدیت، هدر یا فوتر انگلیسی پرید، احتمالاً نام هوک‌های قالب تغییر کرده است.
+            </p>
+        </div>
+        <?php
+    }
+
     public function register_settings() {
-        // ثبت تنظیمات
-        register_setting( 'fikup_poly_group', 'fikup_woodmart_header_id' );
-        register_setting( 'fikup_poly_group', 'fikup_woodmart_footer_id' ); // <--- اضافه شده
-        register_setting( 'fikup_poly_group', 'fikup_enable_stock_sync' );
-        register_setting( 'fikup_poly_group', 'fikup_custom_css_en' );
-        register_setting( 'fikup_poly_group', 'fikup_string_translations', [ 'type' => 'array' ] );
+        // --- گروه ۱: تنظیمات اصلی (General) ---
+        // نام گروه را تغییر دادیم به fikup_poly_general_group
+        register_setting( 'fikup_poly_general_group', 'fikup_woodmart_header_id' );
+        register_setting( 'fikup_poly_general_group', 'fikup_woodmart_footer_id' );
+        register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
+        register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
+
+        // --- گروه ۲: ترجمه کلمات (Strings) ---
+        // نام گروه را تغییر دادیم به fikup_poly_strings_group
+        register_setting( 'fikup_poly_strings_group', 'fikup_string_translations', [ 'type' => 'array' ] );
     }
 
     public function render_settings_page() {
@@ -42,11 +79,12 @@ class Fikup_Poly_Settings {
 
             <form method="post" action="options.php">
                 <?php 
-                settings_fields( 'fikup_poly_group' );
-                
+                // اینجا بسته به تب فعال، گروه تنظیمات مناسب را صدا می‌زنیم
                 if ( $active_tab == 'general' ) {
+                    settings_fields( 'fikup_poly_general_group' ); // <--- فقط گروه عمومی
                     $this->render_general_tab();
                 } elseif ( $active_tab == 'strings' ) {
+                    settings_fields( 'fikup_poly_strings_group' ); // <--- فقط گروه ترجمه
                     $this->render_strings_tab();
                 }
                 
@@ -70,7 +108,6 @@ class Fikup_Poly_Settings {
                     </p>
                 </td>
             </tr>
-
             <tr>
                 <th scope="row">شناسه فوتر انگلیسی (HTML Block)</th>
                 <td>
@@ -81,7 +118,6 @@ class Fikup_Poly_Settings {
                     </p>
                 </td>
             </tr>
-
             <tr>
                 <th scope="row">هماهنگ‌سازی (Sync)</th>
                 <td>
