@@ -6,18 +6,67 @@ class Fikup_Poly_Language {
     public static $current_lang = 'fa';
 
     public function __construct() {
+        // 1. تغییر زبان هسته وردپرس (بسیار مهم برای LTR شدن)
+        add_filter( 'locale', [ $this, 'set_locale' ], 1 );
+
+        // 2. تنظیمات URL و Rewrite
         add_filter( 'query_vars', [ $this, 'register_query_vars' ] );
         add_filter( 'rewrite_rules_array', [ $this, 'add_en_rewrite_rules' ] );
-        add_action( 'wp', [ $this, 'detect_language' ] );
+        
+        // 3. فیلتر لینک‌ها
         add_filter( 'post_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'page_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'post_type_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'term_link', [ $this, 'filter_term_link' ], 10, 2 );
         add_filter( 'home_url', [ $this, 'filter_home_url' ], 10, 2 );
+        
+        // 4. پردازش درخواست
         add_filter( 'request', [ $this, 'intercept_request_for_translation' ] );
-        // جلوگیری از ریدایرکت مزاحم
         add_filter( 'redirect_canonical', [ $this, 'prevent_canonical_redirect' ], 10, 2 );
+
+        // 5. اضافه کردن کلاس به body برای استایل‌دهی راحت‌تر
+        add_filter( 'body_class', [ $this, 'add_body_classes' ] );
     }
+
+    /**
+     * تغییر زبان هسته وردپرس به انگلیسی
+     * این تابع باعث می‌شود is_rtl() مقدار false برگرداند و سایت LTR شود.
+     */
+    public function set_locale( $locale ) {
+        // بررسی سریع URL برای تشخیص زبان (چون هنوز query_vars لود نشده)
+        if ( isset( $_SERVER['REQUEST_URI'] ) ) {
+            $path = parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH );
+            // اگر آدرس با /en/ شروع شده یا خود /en است
+            if ( strpos( $path, '/en/' ) === 0 || $path === '/en' ) {
+                self::$current_lang = 'en';
+                return 'en_US';
+            }
+        }
+
+        // بررسی پارامتر GET برای اطمینان
+        if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) {
+            self::$current_lang = 'en';
+            return 'en_US';
+        }
+
+        return $locale;
+    }
+
+    public function add_body_classes( $classes ) {
+        if ( self::$current_lang === 'en' ) {
+            $classes[] = 'fikup-en-mode';
+            // حذف کلاس rtl اگر اشتباهاً اضافه شده باشد
+            $key = array_search( 'rtl', $classes );
+            if ( false !== $key ) {
+                unset( $classes[ $key ] );
+            }
+            // اضافه کردن کلاس ltr برای اطمینان
+            $classes[] = 'ltr';
+        }
+        return $classes;
+    }
+
+    // --- بقیه توابع بدون تغییر ---
 
     public function prevent_canonical_redirect( $redirect_url, $requested_url ) {
         if ( strpos( $requested_url, '/en/' ) !== false || get_query_var( 'lang' ) === 'en' ) {
@@ -43,6 +92,8 @@ class Fikup_Poly_Language {
 
     public function intercept_request_for_translation( $vars ) {
         if ( isset( $vars['lang'] ) && $vars['lang'] === 'en' ) {
+            self::$current_lang = 'en'; // اطمینان مجدد
+            
             $target_slug = '';
             $post_type = 'post';
 
@@ -56,7 +107,6 @@ class Fikup_Poly_Language {
 
             if ( $target_slug ) {
                 global $wpdb;
-                // 1. اولویت: پست انگلیسی با همین نامک
                 $direct_en_post = $wpdb->get_var( $wpdb->prepare(
                     "SELECT ID FROM $wpdb->posts 
                      INNER JOIN $wpdb->postmeta ON ($wpdb->posts.ID = $wpdb->postmeta.post_id)
@@ -70,7 +120,6 @@ class Fikup_Poly_Language {
                     if( $post_type == 'page' ) $vars['page_id'] = $direct_en_post;
                     else $vars['p'] = $direct_en_post;
                 } else {
-                    // 2. پست فارسی رو پیدا کن و ترجمه اش رو بده
                     $original_post = get_page_by_path( $target_slug, OBJECT, $post_type );
                     if ( $original_post ) {
                         $group_id = get_post_meta( $original_post->ID, '_fikup_translation_group', true );
@@ -93,17 +142,6 @@ class Fikup_Poly_Language {
             }
         }
         return $vars;
-    }
-
-    public function detect_language() {
-        if ( get_query_var( 'lang' ) === 'en' ) {
-            self::$current_lang = 'en';
-            add_filter( 'locale', function() { return 'en_US'; } );
-            add_filter( 'body_class', function( $classes ) {
-                $classes[] = 'fikup-en-mode';
-                return $classes;
-            });
-        }
     }
 
     public function filter_permalink( $url, $post ) {
