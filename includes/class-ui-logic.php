@@ -22,38 +22,23 @@ class Fikup_Poly_UI_Logic {
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
         $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        // 1. هوک تغییر هدر
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
-
-        // 2. هوک تغییر تنظیمات قالب (فوتر)
         add_filter( 'woodmart_option', [ $this, 'override_theme_options' ], 999, 2 );
-
-        // 3. هوک تغییر متای پست
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
-
-        // 4. ترجمه کلمات
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
-        
-        // 5. CSS و فونت انگلیسی (تقویت شده برای دکمه‌ها)
         add_action( 'wp_head', [ $this, 'print_custom_css' ] );
-
-        // 6. غیرفعال کردن ترجمه فارسی قالب
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
     }
 
     public function unload_persian_translations( $mofile, $domain ) {
         if ( ! $this->is_english_context() ) return $mofile;
         $blocked_domains = [ 'woodmart', 'woocommerce', 'woodmart-core' ];
-        if ( in_array( $domain, $blocked_domains ) ) {
-            return ''; 
-        }
+        if ( in_array( $domain, $blocked_domains ) ) return ''; 
         return $mofile;
     }
 
     public function swap_header_builder_id( $id ) {
-        if ( $this->is_english_context() && ! empty( $this->en_header_id ) ) {
-            return $this->en_header_id;
-        }
+        if ( $this->is_english_context() && ! empty( $this->en_header_id ) ) return $this->en_header_id;
         return $id;
     }
 
@@ -82,14 +67,12 @@ class Fikup_Poly_UI_Logic {
 
     public function translate_strings( $translated, $text, $domain ) {
         if ( ! $this->is_english_context() ) return $translated;
-        if ( isset( $this->string_translations[ $text ] ) ) {
-            return $this->string_translations[ $text ];
-        }
+        if ( isset( $this->string_translations[ $text ] ) ) return $this->string_translations[ $text ];
         return $translated;
     }
 
     /**
-     * چاپ CSS و فونت انگلیسی (نسخه نهایی و کامل)
+     * چاپ CSS با استراتژی "همه جا به جز آیکون‌ها"
      */
     public function print_custom_css() {
         if ( $this->is_english_context() ) {
@@ -99,62 +82,52 @@ class Fikup_Poly_UI_Logic {
             
             echo '<style>';
             echo '
-                /* تنظیم فونت کلی */
-                body.fikup-en-mode {
-                    font-family: "Roboto", sans-serif !important;
-                }
-                
-                /* لیست سفید: المان‌هایی که حتماً باید فونت انگلیسی بگیرند 
-                   (شامل تمام دکمه‌های خاص وودمارت و ووکامرس)
-                */
+                /* 1. اعمال فونت انگلیسی روی تمام تگ‌های متنی (حتی span و i) */
+                body.fikup-en-mode,
                 body.fikup-en-mode h1, body.fikup-en-mode h2, body.fikup-en-mode h3, 
                 body.fikup-en-mode h4, body.fikup-en-mode h5, body.fikup-en-mode h6,
                 body.fikup-en-mode p, body.fikup-en-mode a, body.fikup-en-mode li, 
-                body.fikup-en-mode input, body.fikup-en-mode textarea, body.fikup-en-mode select,
-                
-                /* دکمه‌های وودمارت و ووکامرس */
-                body.fikup-en-mode .btn, 
-                body.fikup-en-mode .button, 
-                body.fikup-en-mode button,
-                body.fikup-en-mode .wd-btn,
-                body.fikup-en-mode input[type="submit"],
-                body.fikup-en-mode input[type="button"],
-                body.fikup-en-mode input[type="reset"],
-                body.fikup-en-mode .added_to_cart,
-                body.fikup-en-mode .checkout-button,
-                body.fikup-en-mode .single_add_to_cart_button,
-                body.fikup-en-mode .woodmart-entry-content {
+                body.fikup-en-mode span, body.fikup-en-mode div, 
+                body.fikup-en-mode strong, body.fikup-en-mode b, body.fikup-en-mode i, body.fikup-en-mode em,
+                body.fikup-en-mode button, body.fikup-en-mode input, body.fikup-en-mode textarea, 
+                body.fikup-en-mode select, body.fikup-en-mode label {
                     font-family: "Roboto", sans-serif !important;
                 }
                 
-                /* لیست سیاه: المان‌هایی که نباید فونتشان عوض شود (آیکون‌ها) 
-                */
+                /* 2. استثنا کردن آیکون‌ها (بازگرداندن فونت آیکون) */
+                
+                /* استثنای درخواستی شما: کلاس wd-icon */
+                body.fikup-en-mode .wd-icon,
+                body.fikup-en-mode span.wd-icon {
+                    font-family: "woodmart-font" !important;
+                }
+
+                /* سایر آیکون‌های استاندارد قالب که نباید خراب شوند */
                 body.fikup-en-mode [class*="wd-icon-"],
                 body.fikup-en-mode .woodmart-font,
                 body.fikup-en-mode .wd-tools-icon,
                 body.fikup-en-mode .wd-cross-icon,
-                body.fikup-en-mode .wd-arrow-inner,
-                body.fikup-en-mode .wd-action-btn,
-                body.fikup-en-mode .social-icon,
+                body.fikup-en-mode .social-icon {
+                    font-family: "woodmart-font" !important;
+                }
+
+                /* FontAwesome */
                 body.fikup-en-mode .fa, 
                 body.fikup-en-mode .fas, 
                 body.fikup-en-mode .far, 
-                body.fikup-en-mode .fab,
-                body.fikup-en-mode .star-rating,
-                body.fikup-en-mode .star-rating span:before,
-                body.fikup-en-mode i[class*="eicon-"] {
-                    font-family: "woodmart-font" !important; 
-                }
-                /* فیکس برای فونت اوسام */
-                body.fikup-en-mode .fa, body.fikup-en-mode .fas, body.fikup-en-mode .far {
+                body.fikup-en-mode .fab {
                     font-family: "Font Awesome 5 Free" !important;
                 }
                 body.fikup-en-mode .fab {
                     font-family: "Font Awesome 5 Brands" !important;
                 }
+
+                /* Elementor Icons */
+                body.fikup-en-mode i[class*="eicon-"] {
+                    font-family: "eicons" !important;
+                }
             ';
             
-            // CSS اضافی کاربر
             $css = get_option( 'fikup_custom_css_en' );
             if ( ! empty( $css ) ) {
                 echo wp_strip_all_tags( $css );
