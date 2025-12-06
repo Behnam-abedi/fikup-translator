@@ -14,7 +14,6 @@ class Fikup_Poly_UI_Logic {
         if( is_array($saved_strings) ) {
             foreach($saved_strings as $item) {
                 if(!empty($item['org']) && !empty($item['trans'])) {
-                    // نرمال‌سازی کلیدها (حذف فاصله و دیکد)
                     $key = trim( html_entity_decode( $item['org'] ) );
                     $this->string_translations[ $key ] = $item['trans'];
                 }
@@ -32,6 +31,8 @@ class Fikup_Poly_UI_Logic {
         // ترجمه و زبان
         add_filter( 'gettext', [ $this, 'translate_strings' ], 20, 3 );
         add_filter( 'gettext_with_context', [ $this, 'translate_strings_context' ], 20, 4 );
+        
+        // [مهم] این هوک فایل‌های ترجمه مزاحم را حذف می‌کند
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
         
         // استایل و اسکریپت
@@ -39,44 +40,57 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * تابع قدرتمند تشخیص زبان (شامل تمام سناریوهای ممکن)
+     * تابع قدرتمند تشخیص زبان
      */
     private function is_english_context() {
-        // 1. کوکی (اولویت بالا برای AJAX)
-        if ( isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
-            return true;
+        // اگر در محیط ادمین هستیم، حتماً FALSE برگردان تا پنل ادمین فارسی و شمسی بماند
+        if ( is_admin() && ! wp_doing_ajax() ) {
+            return false;
         }
 
-        // 2. آدرس URL (مطمئن‌ترین روش در صفحات معمولی)
-        if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
-            return true;
-        }
+        // 1. کوکی
+        if ( isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) return true;
+
+        // 2. URL
+        if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) return true;
         
         // 3. پارامتر GET
-        if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) {
-            return true;
-        }
+        if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) return true;
 
-        // 4. هدر HTTP Referer (برای AJAX وقتی کوکی ست نشده)
-        // وقتی از صفحه /en/contact-us درخواست AJAX زده می‌شود، Referer آن صفحه است.
-        if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) {
-            return true;
-        }
+        // 4. کلاس زبان
+        if ( class_exists('Fikup_Poly_Language') && Fikup_Poly_Language::is_english() ) return true;
 
-        // 5. کلاس زبان (اگر قبلاً ست شده باشد)
-        if ( class_exists('Fikup_Poly_Language') && Fikup_Poly_Language::is_english() ) {
-            return true;
+        // 5. بررسی Referer برای AJAX
+        if ( wp_doing_ajax() || isset( $_GET['wc-ajax'] ) ) {
+            if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) return true;
         }
 
         return false;
     }
 
+    /**
+     * [تیر خلاص] جلوگیری از لود شدن فایل‌های ترجمه فارسی
+     */
     public function unload_persian_translations( $mofile, $domain ) {
+        // فقط اگر در محیط انگلیسی هستیم اجرا شود
         if ( ! $this->is_english_context() ) return $mofile;
 
-        $blocked_domains = [ 'woodmart', 'woocommerce', 'woodmart-core' ];
+        // لیست سیاه دامین‌ها (شامل ووکامرس فارسی و متعلقاتش)
+        $blocked_domains = [
+            'woodmart',                 // قالب
+            'woodmart-core',            // هسته قالب
+            'woocommerce',              // ووکامرس اصلی
+            'woocommerce-persian',      // ووکامرس فارسی (رایج‌ترین)
+            'persian-woocommerce',      // نام دیگر ووکامرس فارسی
+            'wooc-fa',                  // نام قدیمی
+            'woocommerce-gateway-zarinpal', // درگاه‌های پرداخت (که متن فارسی دارند)
+            'woocommerce-gateway-mellat',
+            'yith-woocommerce-wishlist', // علاقه‌مندی‌ها
+            'yith-woocommerce-compare'   // مقایسه
+        ];
+        
         if ( in_array( $domain, $blocked_domains ) ) {
-            return ''; 
+            return ''; // آدرس فایل ترجمه را خالی می‌کنیم (بی‌اثر کردن ترجمه)
         }
         return $mofile;
     }
@@ -109,7 +123,8 @@ class Fikup_Poly_UI_Logic {
         // حذف مقادیر فارسی تنظیمات قالب
         $hardcoded_labels = [
             'mini_cart_view_cart_text', 'mini_cart_checkout_text',
-            'btn_view_cart_text', 'btn_checkout_text', 'empty_cart_text'
+            'btn_view_cart_text', 'btn_checkout_text', 'empty_cart_text',
+            'popup_added_to_cart_message' // پیام افزودن به سبد خرید
         ];
         if ( in_array( $slug, $hardcoded_labels ) ) return '';
 
@@ -127,15 +142,11 @@ class Fikup_Poly_UI_Logic {
         return $value;
     }
 
-    /**
-     * چاپ CSS و JS تنظیم کننده کوکی
-     */
     public function print_custom_css_and_js() {
         if ( $this->is_english_context() ) {
             ?>
             <script>
             (function() {
-                // تابعی برای ست کردن کوکی با طول عمر کوتاه (برای سشن) و بلند
                 function setFikupCookie(name, value, days) {
                     var expires = "";
                     if (days) {
@@ -146,15 +157,11 @@ class Fikup_Poly_UI_Logic {
                     document.cookie = name + "=" + (value || "")  + expires + "; path=/";
                 }
                 
-                // اگر در مسیر انگلیسی هستیم، فوراً کوکی را ست کن
                 if ( window.location.pathname.indexOf('/en/') !== -1 ) {
-                    // ست کردن کوکی جاوا اسکریپتی برای اطمینان از دسترسی فوری
                     setFikupCookie('fikup_lang', 'en', 30);
                     
-                    // اطمینان از اینکه در درخواست‌های بعدی AJAX هم ارسال شود
                     if ( typeof jQuery !== 'undefined' ) {
                         jQuery( document ).ajaxSend(function(event, xhr, settings) {
-                            // اضافه کردن هدر سفارشی به درخواست‌های آژاکس (اختیاری ولی کمک کننده)
                             xhr.setRequestHeader('X-Fikup-Lang', 'en');
                         });
                     }
@@ -163,7 +170,6 @@ class Fikup_Poly_UI_Logic {
             </script>
             <?php
 
-            // --- استایل‌ها (فونت و...) ---
             echo '<link rel="preconnect" href="https://fonts.googleapis.com">';
             echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
             echo '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">';
