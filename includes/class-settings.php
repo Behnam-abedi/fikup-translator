@@ -27,7 +27,7 @@ class Fikup_Poly_Settings {
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
-        // حلقه ترجمه (مشابه ووکامرس فارسی)
+        // لیست ترجمه‌های هوشمند
         register_setting( 'fikup_poly_strings_group', 'fikup_translations_list', [ 
             'type' => 'array',
             'sanitize_callback' => [ $this, 'sanitize_translations' ]
@@ -40,7 +40,7 @@ class Fikup_Poly_Settings {
             foreach ( $input as $item ) {
                 if ( ! empty( $item['key'] ) ) {
                     $clean[] = [
-                        'key' => sanitize_text_field( $item['key'] ), // متن اصلی (فارسی یا انگلیسی)
+                        'key' => sanitize_text_field( $item['key'] ), // متن موجود (فارسی یا انگلیسی)
                         'val' => wp_kses_post( $item['val'] ) // ترجمه (انگلیسی)
                     ];
                 }
@@ -53,7 +53,7 @@ class Fikup_Poly_Settings {
         $active_tab = isset( $_GET['tab'] ) ? $_GET['tab'] : 'general';
         ?>
         <div class="wrap">
-            <h1>سیستم چندزبانه Fikup (نسخه پایدار)</h1>
+            <h1>سیستم چندزبانه Fikup (نسخه Native)</h1>
             <h2 class="nav-tab-wrapper">
                 <a href="?page=fikup-poly&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">تنظیمات اصلی</a>
                 <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">حلقه ترجمه (مشابه ووکامرس فارسی)</a>
@@ -102,7 +102,7 @@ class Fikup_Poly_Settings {
         ?>
         <div class="notice inline notice-info">
             <p><strong>راهنما:</strong> در اینجا می‌توانید هر متنی که در سایت (حالت انگلیسی) نمایش داده می‌شود را تغییر دهید.</p>
-            <p>این سیستم دقیقاً مثل "حلقه ترجمه" ووکامرس فارسی عمل می‌کند. کافیست <strong>متن موجود</strong> را در ستون اول و <strong>ترجمه دلخواه</strong> را در ستون دوم بنویسید.</p>
+            <p>این سیستم دقیقاً مثل "حلقه ترجمه" ووکامرس فارسی عمل می‌کند. کافیست <strong>متن موجود</strong> (چه فارسی باشد چه انگلیسی) را در ستون اول و <strong>ترجمه دلخواه</strong> را در ستون دوم بنویسید.</p>
         </div>
         <div id="strings-wrapper">
             <table class="widefat fixed striped" style="max-width: 1000px;">
@@ -128,8 +128,8 @@ class Fikup_Poly_Settings {
         
         <script type="text/template" id="tmpl-row">
             <tr>
-                <td><input type="text" name="fikup_translations_list[INDEX][key]" class="widefat" placeholder="مثال: تومان"></td>
-                <td><input type="text" name="fikup_translations_list[INDEX][val]" class="widefat" placeholder="مثال: Toman"></td>
+                <td><input type="text" name="fikup_translations_list[INDEX][key]" class="widefat" placeholder="مثال: سبد خرید خالی است"></td>
+                <td><input type="text" name="fikup_translations_list[INDEX][val]" class="widefat" placeholder="مثال: Your cart is empty"></td>
                 <td><button type="button" class="button remove-row" style="color: #a00;">X</button></td>
             </tr>
         </script>
