@@ -21,7 +21,15 @@ class Fikup_Poly_Settings {
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
-        // حلقه ترجمه (مشابه ووکامرس فارسی)
+        // تنظیمات دیزاین سوئیچر
+        register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_bg_color' );
+        register_setting( 'fikup_poly_switcher_text_color' );
+        register_setting( 'fikup_poly_switcher_active_bg' );
+        register_setting( 'fikup_poly_switcher_active_text' );
+        register_setting( 'fikup_poly_switcher_radius' );
+        register_setting( 'fikup_poly_switcher_padding' );
+
+        // حلقه ترجمه
         register_setting( 'fikup_poly_strings_group', 'fikup_translations_list', [ 
             'type' => 'array',
             'sanitize_callback' => [ $this, 'sanitize_translations' ]
@@ -34,8 +42,8 @@ class Fikup_Poly_Settings {
             foreach ( $input as $item ) {
                 if ( ! empty( $item['key'] ) ) {
                     $clean[] = [
-                        'key' => sanitize_text_field( $item['key'] ), // متن اصلی
-                        'val' => wp_kses_post( $item['val'] ) // ترجمه
+                        'key' => sanitize_text_field( $item['key'] ),
+                        'val' => wp_kses_post( $item['val'] )
                     ];
                 }
             }
@@ -50,13 +58,17 @@ class Fikup_Poly_Settings {
             <h1>سیستم چندزبانه Fikup (نسخه Native)</h1>
             <h2 class="nav-tab-wrapper">
                 <a href="?page=fikup-poly&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">تنظیمات اصلی</a>
-                <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">حلقه ترجمه (مشابه ووکامرس فارسی)</a>
+                <a href="?page=fikup-poly&tab=switcher" class="nav-tab <?php echo $active_tab == 'switcher' ? 'nav-tab-active' : ''; ?>">دیزاین سوئیچر</a>
+                <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">حلقه ترجمه</a>
             </h2>
             <form method="post" action="options.php">
                 <?php 
                 if ( $active_tab == 'general' ) {
                     settings_fields( 'fikup_poly_general_group' );
                     $this->render_general_tab();
+                } elseif ( $active_tab == 'switcher' ) {
+                    settings_fields( 'fikup_poly_switcher_group' );
+                    $this->render_switcher_tab();
                 } elseif ( $active_tab == 'strings' ) {
                     settings_fields( 'fikup_poly_strings_group' );
                     $this->render_strings_tab();
@@ -79,35 +91,57 @@ class Fikup_Poly_Settings {
         <?php
     }
 
+    private function render_switcher_tab() {
+        ?>
+        <div class="notice inline notice-info"><p>از شورت‌کد <code>[fikup_switcher]</code> برای نمایش دکمه تغییر زبان در هدر یا ابزارک‌ها استفاده کنید.</p></div>
+        <table class="form-table">
+            <tr>
+                <th scope="row">رنگ پس‌زمینه کل</th>
+                <td><input type="color" name="fikup_switcher_bg_color" value="<?php echo esc_attr( get_option('fikup_switcher_bg_color', '#f1f1f1') ); ?>"></td>
+            </tr>
+            <tr>
+                <th scope="row">رنگ متن (غیرفعال)</th>
+                <td><input type="color" name="fikup_switcher_text_color" value="<?php echo esc_attr( get_option('fikup_switcher_text_color', '#333333') ); ?>"></td>
+            </tr>
+            <tr>
+                <th scope="row">رنگ پس‌زمینه (فعال)</th>
+                <td><input type="color" name="fikup_switcher_active_bg" value="<?php echo esc_attr( get_option('fikup_switcher_active_bg', '#0073aa') ); ?>"></td>
+            </tr>
+            <tr>
+                <th scope="row">رنگ متن (فعال)</th>
+                <td><input type="color" name="fikup_switcher_active_text" value="<?php echo esc_attr( get_option('fikup_switcher_active_text', '#ffffff') ); ?>"></td>
+            </tr>
+            <tr>
+                <th scope="row">گردی گوشه‌ها (px)</th>
+                <td><input type="number" name="fikup_switcher_radius" value="<?php echo esc_attr( get_option('fikup_switcher_radius', '5') ); ?>" class="small-text"> پیکسل</td>
+            </tr>
+            <tr>
+                <th scope="row">فاصله داخلی (px)</th>
+                <td><input type="number" name="fikup_switcher_padding" value="<?php echo esc_attr( get_option('fikup_switcher_padding', '5') ); ?>" class="small-text"> پیکسل</td>
+            </tr>
+        </table>
+        <?php
+    }
+
     private function render_strings_tab() {
         $translations = get_option( 'fikup_translations_list', [] );
         ?>
         <div class="notice inline notice-info">
-            <p><strong>راهنما:</strong> در اینجا می‌توانید هر متنی که در سایت (حالت انگلیسی) نمایش داده می‌شود را تغییر دهید.</p>
-            <p>کافیست <strong>متن موجود</strong> (چه فارسی باشد چه انگلیسی) را در ستون اول و <strong>ترجمه دلخواه</strong> را در ستون دوم بنویسید.</p>
+            <p><strong>راهنما:</strong> متن موجود در ستون اول، ترجمه در ستون دوم.</p>
         </div>
         <div id="strings-wrapper">
             <table class="widefat fixed striped" style="max-width: 1000px;">
-                <thead>
-                    <tr><th style="width: 45%;">متن اصلی (موجود در سایت)</th><th style="width: 45%;">جایگزین (در حالت انگلیسی)</th><th style="width: 50px;">حذف</th></tr>
-                </thead>
+                <thead><tr><th>متن اصلی</th><th>جایگزین</th><th style="width: 50px;">حذف</th></tr></thead>
                 <tbody id="strings-list">
-                    <?php 
-                    if ( ! empty( $translations ) && is_array( $translations ) ) {
-                        foreach ( $translations as $i => $item ) {
-                            $this->render_row( $i, $item['key'], $item['val'] );
-                        }
-                    }
-                    ?>
+                    <?php if(!empty($translations) && is_array($translations)) foreach($translations as $i => $item) $this->render_row($i, $item['key'], $item['val']); ?>
                 </tbody>
             </table>
             <br><button type="button" class="button button-primary" id="add-string">+ افزودن کلمه جدید</button>
         </div>
-        
         <script type="text/template" id="tmpl-row">
             <tr>
-                <td><input type="text" name="fikup_translations_list[INDEX][key]" class="widefat" placeholder="مثال: تومان"></td>
-                <td><input type="text" name="fikup_translations_list[INDEX][val]" class="widefat" placeholder="مثال: Toman"></td>
+                <td><input type="text" name="fikup_translations_list[INDEX][key]" class="widefat"></td>
+                <td><input type="text" name="fikup_translations_list[INDEX][val]" class="widefat"></td>
                 <td><button type="button" class="button remove-row" style="color: #a00;">X</button></td>
             </tr>
         </script>
@@ -115,8 +149,7 @@ class Fikup_Poly_Settings {
             jQuery(document).ready(function($) {
                 $('#add-string').click(function() {
                     var idx = $('#strings-list tr').length + Date.now();
-                    var html = $('#tmpl-row').html().replace(/INDEX/g, idx);
-                    $('#strings-list').append(html);
+                    $('#strings-list').append($('#tmpl-row').html().replace(/INDEX/g, idx));
                 });
                 $('body').on('click', '.remove-row', function() { $(this).closest('tr').remove(); });
             });

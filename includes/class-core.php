@@ -8,7 +8,7 @@ class Fikup_Poly_Core {
     }
 
     private function load_dependencies() {
-        // ترتیب لود شدن مهم است
+        // ترتیب لود شدن
         require_once FIKUP_POLY_PATH . 'includes/class-settings.php';
         require_once FIKUP_POLY_PATH . 'includes/class-language.php';
         require_once FIKUP_POLY_PATH . 'includes/class-duplicator.php';
@@ -16,14 +16,16 @@ class Fikup_Poly_Core {
         require_once FIKUP_POLY_PATH . 'includes/class-ui-logic.php';
         require_once FIKUP_POLY_PATH . 'includes/class-comments.php';
         require_once FIKUP_POLY_PATH . 'includes/class-seo.php';
+        require_once FIKUP_POLY_PATH . 'includes/class-switcher.php'; // <--- فایل جدید اضافه شد
 
         // اجرای کلاس‌ها
-        new Fikup_Poly_Settings();    // پنل تنظیمات
-        new Fikup_Poly_Language();    // مدیریت URL
-        new Fikup_Poly_Duplicator();  // کپی کننده پست
-        new Fikup_Poly_Sync();        // سینک موجودی
-        new Fikup_Poly_UI_Logic();    // تغییرات ظاهری (هدر، منو، ترجمه)
-        new Fikup_Poly_Comments();    // کامنت مشترک
-        new Fikup_Poly_SEO();         // تگ‌های سئو
+        new Fikup_Poly_Settings();    
+        new Fikup_Poly_Language();    
+        new Fikup_Poly_Duplicator();  
+        new Fikup_Poly_Sync();        
+        new Fikup_Poly_UI_Logic();    
+        new Fikup_Poly_Comments();    
+        new Fikup_Poly_SEO();
+        new Fikup_Poly_Switcher(); // <--- کلاس جدید اجرا شد
     }
 }
