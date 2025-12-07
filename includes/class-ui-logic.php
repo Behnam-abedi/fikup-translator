@@ -8,6 +8,8 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
+        $this->log( 'Init: Fikup UI Logic Loaded.' );
+
         // لود تنظیمات
         $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
@@ -20,7 +22,7 @@ class Fikup_Poly_UI_Logic {
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
         $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        // --- 1. هوک‌های ترجمه و قالب (اولویت بالا) ---
+        // 1. هوک‌های ترجمه و قالب
         add_filter( 'gettext', [ $this, 'universal_translator' ], 9999, 3 );
         add_filter( 'gettext_with_context', [ $this, 'universal_translator_context' ], 9999, 4 );
         add_filter( 'woodmart_option', [ $this, 'translate_theme_options' ], 999, 2 );
@@ -29,24 +31,30 @@ class Fikup_Poly_UI_Logic {
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
         add_filter( 'option_persian_woocommerce_replacements', [ $this, 'disable_persian_replacements' ] );
 
-        // --- 2. اصلاح‌کننده دیکتاتوری زبان (The Override) ---
-        // این هوک با اولویت 20 اجرا می‌شود تا تصمیمات class-language.php (که اولویت 1 دارد) را لغو کند
+        // 2. هوک تشخیص زبان (The Override)
         add_filter( 'locale', [ $this, 'force_ajax_locale_by_referer' ], 20 );
 
-        // --- 3. جلوگیری از کش سرور ---
-        // جدا کردن فایل‌های کش شده ووکامرس بر اساس زبان
+        // 3. هوک هش سبد خرید
         add_filter( 'woocommerce_cart_hash', [ $this, 'split_cart_hash_by_lang' ] );
 
-        // --- 4. اسکریپت ساده مدیریت کش مرورگر ---
-        add_action( 'wp_head', [ $this, 'print_cache_buster_js' ], 1 );
+        // 4. اسکریپت دیباگر در فرانت
+        add_action( 'wp_head', [ $this, 'print_debug_js' ], 1 );
     }
 
     /**
-     * هسته مرکزی تشخیص زبان (بر اساس Referer)
-     * این تابع تصمیم می‌گیرد که الان سایت باید انگلیسی باشد یا فارسی
+     * سیستم لاگ‌برداری در فایل debug.log
+     */
+    private function log( $msg ) {
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( '[Fikup Debug] ' . $msg );
+        }
+    }
+
+    /**
+     * منطق تشخیص زبان با لاگ کامل
      */
     private function get_referer_based_lang() {
-        // اگر ایجکس نیست، همان منطق URL عادی
+        // اگر درخواست عادی است (Page Load)
         if ( ! wp_doing_ajax() ) {
             if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
                 return 'en';
@@ -54,15 +62,19 @@ class Fikup_Poly_UI_Logic {
             return 'fa';
         }
 
-        // اگر ایجکس است، به "Referer" (صفحه‌ای که کاربر در آن است) نگاه کن
-        $referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '';
+        // اگر درخواست ایجکس است
+        $referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : 'NO_REFERER';
+        $is_en_ref = strpos( $referer, '/en/' ) !== false;
         
-        // اگر رفرر وجود داشت و توش /en/ بود، یعنی کاربر در صفحه انگلیسیه
-        if ( $referer && strpos( $referer, '/en/' ) !== false ) {
+        // لاگ کردن جزئیات درخواست ایجکس
+        // $this->log( "AJAX Request Detected. Referer: $referer" );
+
+        if ( $is_en_ref ) {
+            // $this->log( "Decision: ENGLISH (based on referer)" );
             return 'en';
         }
 
-        // در غیر این صورت قطعا فارسیه
+        // $this->log( "Decision: PERSIAN (based on referer)" );
         return 'fa';
     }
 
@@ -70,28 +82,30 @@ class Fikup_Poly_UI_Logic {
         return $this->get_referer_based_lang() === 'en';
     }
 
-    /**
-     * تغییر اجباری Locale وردپرس در لحظه درخواست ایجکس
-     * این باعث می‌شود ترجمه‌های ووکامرس (gettext) درست بارگذاری شوند
-     */
     public function force_ajax_locale_by_referer( $locale ) {
         if ( wp_doing_ajax() ) {
             $lang = $this->get_referer_based_lang();
+            
+            // اضافه کردن هدر برای دیدن در Network Tab مرورگر
+            if ( ! headers_sent() ) {
+                header( 'X-Fikup-Debug-Lang: ' . $lang );
+                header( 'X-Fikup-Debug-Locale: ' . $locale );
+            }
+
             if ( $lang === 'en' ) {
                 return 'en_US';
             } else {
-                return 'fa_IR'; // برگرداندن به فارسی حتی اگر کوکی انگلیسی ست شده باشد
+                return 'fa_IR';
             }
         }
         return $locale;
     }
 
-    /**
-     * تغییر هش سبد خرید
-     * باعث می‌شود ووکامرس HTML جدید بسازد و از کش قبلی استفاده نکند
-     */
     public function split_cart_hash_by_lang( $hash ) {
-        return $hash . '-' . $this->get_referer_based_lang();
+        $lang = $this->get_referer_based_lang();
+        $new_hash = $hash . '-' . $lang;
+        // $this->log( "Cart Hash Modified: $new_hash" );
+        return $new_hash;
     }
 
     // --- توابع ترجمه ---
@@ -109,8 +123,6 @@ class Fikup_Poly_UI_Logic {
         if ( $slug === 'footer_content_type' ) return 'html_block';
         if ( $slug === 'footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
         if ( is_string( $value ) && isset( $this->translations_map[ trim($value) ] ) ) return $this->translations_map[ trim($value) ];
-        
-        // مقادیر خالی برای اینکه قالب انگلیسی پیش‌فرض را لود کند
         $defaults = [ 'empty_cart_text', 'mini_cart_view_cart_text', 'mini_cart_checkout_text', 'btn_view_cart_text', 'btn_checkout_text', 'copyrights' ];
         if ( in_array( $slug, $defaults ) ) return '';
         return $value;
@@ -134,40 +146,47 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * اسکریپت ساده و قطعی برای پاکسازی کش مرورگر
-     * فقط وقتی اجرا می‌شود که زبان تغییر کرده باشد.
+     * اسکریپت دیباگر کنسول
      */
-    public function print_cache_buster_js() {
+    public function print_debug_js() {
         ?>
         <script>
         (function() {
-            // زبانِ آدرس فعلی چیست؟
             var isEn = window.location.pathname.indexOf('/en/') !== -1;
             var currentLang = isEn ? 'en' : 'fa';
             
+            console.group("🔴 Fikup Debugger");
+            console.log("URL Path:", window.location.pathname);
+            console.log("Detected Lang (JS):", currentLang);
+
             try {
-                // آخرین زبانی که مرورگر یادش است چیست؟
                 var savedLang = localStorage.getItem('fikup_active_lang');
+                console.log("Saved Lang in Storage:", savedLang);
                 
-                // اگر زبان عوض شده (یا دفعه اول است)
                 if ( savedLang !== currentLang ) {
-                    // 1. پاک کردن کش‌های ووکامرس در مرورگر
+                    console.warn("⚠️ Mismatch Detected! Clearing Cache...");
+                    
                     sessionStorage.removeItem('wc_fragments_hash');
                     sessionStorage.removeItem('wc_fragments');
                     sessionStorage.removeItem('wc_cart_hash_data');
                     sessionStorage.removeItem('wc_cart_created');
                     
-                    // 2. ذخیره زبان جدید
                     localStorage.setItem('fikup_active_lang', currentLang);
                     
-                    // 3. دستور رفرش به ووکامرس (اگر در صفحه لود شده باشد)
                     if ( typeof jQuery !== 'undefined' ) {
+                        console.log("🚀 Triggering wc_fragment_refresh...");
                         jQuery(document.body).trigger('wc_fragment_refresh');
+                    } else {
+                        console.error("❌ jQuery is not loaded yet!");
                     }
+                } else {
+                    console.log("✅ Lang matches storage. No cache clear needed.");
                 }
-            } catch(e) {}
+            } catch(e) {
+                console.error("Storage Error:", e);
+            }
+            console.groupEnd();
             
-            // استایل‌های انگلیسی
             if ( isEn ) {
                 var css = 'body.fikup-en-mode, .fikup-en-mode { font-family: "Roboto", sans-serif !important; }';
                 var style = document.createElement('style');
