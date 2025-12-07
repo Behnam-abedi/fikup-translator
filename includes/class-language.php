@@ -9,18 +9,21 @@ class Fikup_Poly_Language {
         add_filter( 'locale', [ $this, 'set_locale' ], 1 );
         add_filter( 'query_vars', [ $this, 'register_query_vars' ] );
         add_filter( 'rewrite_rules_array', [ $this, 'add_en_rewrite_rules' ] );
+        
+        // فیلترهای لینک‌دهی
         add_filter( 'post_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'page_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'post_type_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'term_link', [ $this, 'filter_term_link' ], 10, 2 );
         add_filter( 'home_url', [ $this, 'filter_home_url' ], 10, 2 );
+        
         add_filter( 'request', [ $this, 'intercept_request_for_translation' ] );
         add_filter( 'redirect_canonical', [ $this, 'prevent_canonical_redirect' ], 10, 2 );
         add_filter( 'body_class', [ $this, 'add_body_classes' ] );
     }
 
     /**
-     * تابع جدید: پیدا کردن لینک نسخه مخالف (هوشمند)
+     * پیدا کردن لینک نسخه مخالف (هوشمند)
      */
     public static function get_translated_url() {
         $is_currently_en = self::is_english();
@@ -33,7 +36,6 @@ class Fikup_Poly_Language {
             
             if ( $group_id ) {
                 global $wpdb;
-                // پیدا کردن پستی که در همین گروه است اما زبانش متفاوت است
                 $target_id = $wpdb->get_var( $wpdb->prepare(
                     "SELECT post_id FROM $wpdb->postmeta 
                      WHERE meta_key = '_fikup_translation_group' AND meta_value = %s 
@@ -47,7 +49,7 @@ class Fikup_Poly_Language {
             }
         }
 
-        // ۲. اگر لینک پیدا نشد یا در آرشیو/صفحه اصلی بودیم، به صفحه اصلی زبان مقصد برو
+        // ۲. فال‌بک به صفحه اصلی
         $home = rtrim( get_option( 'home' ), '/' );
         return ( $target_lang === 'en' ) ? $home . '/en/' : $home . '/';
     }
@@ -133,11 +135,25 @@ class Fikup_Poly_Language {
         return $redirect_url;
     }
 
+    // --- اصلاحات مهم برای لینک‌دهی ---
+
     public function filter_permalink( $url, $post ) {
         $post = get_post( $post );
         if ( ! $post ) return $url;
+        
         $lang = get_post_meta( $post->ID, '_fikup_lang', true );
-        if ( $lang === 'en' ) return $this->inject_en_prefix( $url );
+        
+        // حالت ۱: پست انگلیسی است -> باید /en داشته باشد
+        if ( $lang === 'en' ) {
+            return $this->inject_en_prefix( $url );
+        }
+        
+        // حالت ۲: پست فارسی است اما در صفحه انگلیسی هستیم -> باید /en حذف شود
+        // این بخش مشکل شما را حل می‌کند (حذف en/ از لینک بازگشت به فارسی)
+        if ( $lang !== 'en' ) {
+            return $this->strip_en_prefix( $url );
+        }
+        
         return $url;
     }
 
@@ -156,10 +172,23 @@ class Fikup_Poly_Language {
         return $url;
     }
 
+    // اضافه کردن /en به لینک
     private function inject_en_prefix( $url ) {
         $home = rtrim( get_option( 'home' ), '/' );
         if ( strpos( $url, '/en/' ) !== false ) return $url;
         return str_replace( $home, $home . '/en', $url );
+    }
+
+    // حذف /en از لینک (جدید)
+    private function strip_en_prefix( $url ) {
+        $home = rtrim( get_option( 'home' ), '/' );
+        $home_en = $home . '/en';
+        
+        // اگر آدرس با دامنه/en شروع می‌شود، آن را با دامنه خالی جایگزین کن
+        if ( strpos( $url, $home_en ) === 0 ) {
+            return str_replace( $home_en, $home, $url );
+        }
+        return $url;
     }
 
     public static function is_english() {
