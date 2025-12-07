@@ -22,14 +22,16 @@ class Fikup_Poly_Settings {
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
-        // تنظیمات دیزاین سوئیچر (بخش اصلاح شده)
-        // قبلاً آرگومان اول (نام گروه) در خطوط پایین جا افتاده بود که باعث ارور می‌شد
+        // تنظیمات سوئیچر
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_bg_color' );
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_text_color' );
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_active_bg' );
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_active_text' );
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_radius' );
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_padding' );
+
+        // تنظیمات نقشه لینک‌ها (جدید)
+        register_setting( 'fikup_poly_slugs_group', 'fikup_slug_mapping' );
 
         // حلقه ترجمه
         register_setting( 'fikup_poly_strings_group', 'fikup_translations_list', [ 
@@ -61,7 +63,8 @@ class Fikup_Poly_Settings {
             <h2 class="nav-tab-wrapper">
                 <a href="?page=fikup-poly&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">تنظیمات اصلی</a>
                 <a href="?page=fikup-poly&tab=switcher" class="nav-tab <?php echo $active_tab == 'switcher' ? 'nav-tab-active' : ''; ?>">دیزاین سوئیچر</a>
-                <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">حلقه ترجمه</a>
+                <a href="?page=fikup-poly&tab=slugs" class="nav-tab <?php echo $active_tab == 'slugs' ? 'nav-tab-active' : ''; ?>">نقشه لینک‌ها (Slugs)</a>
+                <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">حلقه ترجمه متن</a>
             </h2>
             <form method="post" action="options.php">
                 <?php 
@@ -71,6 +74,9 @@ class Fikup_Poly_Settings {
                 } elseif ( $active_tab == 'switcher' ) {
                     settings_fields( 'fikup_poly_switcher_group' );
                     $this->render_switcher_tab();
+                } elseif ( $active_tab == 'slugs' ) {
+                    settings_fields( 'fikup_poly_slugs_group' );
+                    $this->render_slugs_tab();
                 } elseif ( $active_tab == 'strings' ) {
                     settings_fields( 'fikup_poly_strings_group' );
                     $this->render_strings_tab();
@@ -94,32 +100,36 @@ class Fikup_Poly_Settings {
     }
 
     private function render_switcher_tab() {
+        // ... (کدهای تب سوئیچر بدون تغییر) ...
         ?>
-        <div class="notice inline notice-info"><p>از شورت‌کد <code>[fikup_switcher]</code> برای نمایش دکمه تغییر زبان در هدر یا ابزارک‌ها استفاده کنید.</p></div>
+        <table class="form-table">
+            <tr><th scope="row">رنگ پس‌زمینه کل</th><td><input type="color" name="fikup_switcher_bg_color" value="<?php echo esc_attr( get_option('fikup_switcher_bg_color', '#f1f1f1') ); ?>"></td></tr>
+            <tr><th scope="row">رنگ متن (غیرفعال)</th><td><input type="color" name="fikup_switcher_text_color" value="<?php echo esc_attr( get_option('fikup_switcher_text_color', '#333333') ); ?>"></td></tr>
+            <tr><th scope="row">رنگ پس‌زمینه (فعال)</th><td><input type="color" name="fikup_switcher_active_bg" value="<?php echo esc_attr( get_option('fikup_switcher_active_bg', '#0073aa') ); ?>"></td></tr>
+            <tr><th scope="row">رنگ متن (فعال)</th><td><input type="color" name="fikup_switcher_active_text" value="<?php echo esc_attr( get_option('fikup_switcher_active_text', '#ffffff') ); ?>"></td></tr>
+            <tr><th scope="row">گردی گوشه‌ها (px)</th><td><input type="number" name="fikup_switcher_radius" value="<?php echo esc_attr( get_option('fikup_switcher_radius', '5') ); ?>" class="small-text"></td></tr>
+            <tr><th scope="row">فاصله داخلی (px)</th><td><input type="number" name="fikup_switcher_padding" value="<?php echo esc_attr( get_option('fikup_switcher_padding', '5') ); ?>" class="small-text"></td></tr>
+        </table>
+        <?php
+    }
+
+    private function render_slugs_tab() {
+        ?>
+        <div class="notice inline notice-info">
+            <p><strong>راهنما:</strong> در اینجا می‌توانید نامک (Slug) صفحات انگلیسی را به معادل فارسی آن‌ها وصل کنید.</p>
+            <p>فرمت: <code>نامک_انگلیسی:نامک_فارسی</code> (هر جفت در یک خط جدید)</p>
+            <p><strong>مثال:</strong><br>
+            <code>wishlist:علاقه-مندی-ها</code><br>
+            <code>cart:سبد-خرید</code>
+            </p>
+        </div>
         <table class="form-table">
             <tr>
-                <th scope="row">رنگ پس‌زمینه کل</th>
-                <td><input type="color" name="fikup_switcher_bg_color" value="<?php echo esc_attr( get_option('fikup_switcher_bg_color', '#f1f1f1') ); ?>"></td>
-            </tr>
-            <tr>
-                <th scope="row">رنگ متن (غیرفعال)</th>
-                <td><input type="color" name="fikup_switcher_text_color" value="<?php echo esc_attr( get_option('fikup_switcher_text_color', '#333333') ); ?>"></td>
-            </tr>
-            <tr>
-                <th scope="row">رنگ پس‌زمینه (فعال)</th>
-                <td><input type="color" name="fikup_switcher_active_bg" value="<?php echo esc_attr( get_option('fikup_switcher_active_bg', '#0073aa') ); ?>"></td>
-            </tr>
-            <tr>
-                <th scope="row">رنگ متن (فعال)</th>
-                <td><input type="color" name="fikup_switcher_active_text" value="<?php echo esc_attr( get_option('fikup_switcher_active_text', '#ffffff') ); ?>"></td>
-            </tr>
-            <tr>
-                <th scope="row">گردی گوشه‌ها (px)</th>
-                <td><input type="number" name="fikup_switcher_radius" value="<?php echo esc_attr( get_option('fikup_switcher_radius', '5') ); ?>" class="small-text"> پیکسل</td>
-            </tr>
-            <tr>
-                <th scope="row">فاصله داخلی (px)</th>
-                <td><input type="number" name="fikup_switcher_padding" value="<?php echo esc_attr( get_option('fikup_switcher_padding', '5') ); ?>" class="small-text"> پیکسل</td>
+                <th scope="row">لیست نگاشت‌ها</th>
+                <td>
+                    <textarea name="fikup_slug_mapping" rows="15" class="large-text code"><?php echo esc_textarea( get_option('fikup_slug_mapping') ); ?></textarea>
+                    <p class="description">دقت کنید که فقط نامک (قسمت آخر آدرس) را بنویسید، نه کل آدرس را. از علامت <code>:</code> برای جدا کردن استفاده کنید.</p>
+                </td>
             </tr>
         </table>
         <?php
@@ -128,9 +138,6 @@ class Fikup_Poly_Settings {
     private function render_strings_tab() {
         $translations = get_option( 'fikup_translations_list', [] );
         ?>
-        <div class="notice inline notice-info">
-            <p><strong>راهنما:</strong> متن موجود در ستون اول، ترجمه در ستون دوم.</p>
-        </div>
         <div id="strings-wrapper">
             <table class="widefat fixed striped" style="max-width: 1000px;">
                 <thead><tr><th>متن اصلی</th><th>جایگزین</th><th style="width: 50px;">حذف</th></tr></thead>

@@ -14,7 +14,6 @@ class Fikup_Poly_Language {
         add_filter( 'page_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'post_type_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'term_link', [ $this, 'filter_term_link' ], 10, 2 );
-        add_filter( 'home_url', [ $this, 'filter_home_url' ], 10, 2 );
         
         add_filter( 'woocommerce_get_cart_url', [ $this, 'force_en_url' ] );
         add_filter( 'woocommerce_get_checkout_url', [ $this, 'force_en_url' ] );
@@ -33,17 +32,38 @@ class Fikup_Poly_Language {
     }
 
     /**
-     * هسته اصلی تولید لینک ترجمه (با قابلیت Slug Matching)
+     * هسته اصلی تولید لینک ترجمه (با خواندن تنظیمات کاربر)
      */
     public static function get_translated_url() {
         $is_currently_en = self::is_english();
         $target_lang = $is_currently_en ? 'fa' : 'en';
-        $final_url = '';
+        
+        // --- خواندن نقشه اسلاگ‌ها از تنظیمات ---
+        $slug_map = [];
+        $raw_map = get_option( 'fikup_slug_mapping', '' );
+        if ( ! empty( $raw_map ) ) {
+            $lines = explode( "\n", $raw_map );
+            foreach ( $lines as $line ) {
+                $parts = explode( ':', $line );
+                if ( count( $parts ) >= 2 ) {
+                    $en_key = trim( $parts[0] );
+                    $fa_val = trim( $parts[1] );
+                    if ( ! empty( $en_key ) && ! empty( $fa_val ) ) {
+                        $slug_map[ $en_key ] = $fa_val;
+                    }
+                }
+            }
+        }
+        
+        // همیشه این‌ها را هم به عنوان پیش‌فرض داشته باشیم (مگر اینکه کاربر اورراید کند)
+        if ( ! isset( $slug_map['cart'] ) ) $slug_map['cart'] = 'cart';
+        if ( ! isset( $slug_map['checkout'] ) ) $slug_map['checkout'] = 'checkout';
 
+        // ۱. بررسی صفحه فعلی
         if ( is_singular() ) {
             $current_id = get_the_ID();
             
-            // روش ۱: استفاده از اتصال دستی (Metabox/Duplicate)
+            // الف) تلاش برای پیدا کردن از طریق اتصال دیتابیس (Metabox)
             $group_id = get_post_meta( $current_id, '_fikup_translation_group', true );
             if ( $group_id ) {
                 global $wpdb;
@@ -58,104 +78,57 @@ class Fikup_Poly_Language {
                     $group_id, $current_id
                 ));
                 if ( $target_id ) {
-                    $final_url = self::get_clean_permalink( $target_id, $target_lang );
+                    return self::finalize_url( get_permalink( $target_id ), $target_lang );
                 }
             }
+            
+            // ب) اگر اتصال نبود، چک کردن نقشه دستی کاربر
+            $post = get_post( $current_id );
+            $current_slug = urldecode( $post->post_name ); 
 
-            // روش ۲: اگر اتصال دستی نبود، پیدا کردن از روی نامک (Slug Matching)
-            if ( empty( $final_url ) ) {
-                global $wpdb;
-                $current_post = get_post( $current_id );
-                if ( $current_post ) {
-                    $slug = $current_post->post_name;
-                    $post_type = $current_post->post_type;
-                    
-                    // پیدا کردن پستی با همین نامک اما زبان متفاوت
-                    $fuzzy_id = $wpdb->get_var( $wpdb->prepare(
-                        "SELECT p.ID FROM $wpdb->posts p
-                         INNER JOIN $wpdb->postmeta m ON p.ID = m.post_id
-                         WHERE p.post_name = %s 
-                         AND p.post_type = %s 
-                         AND p.post_status = 'publish'
-                         AND m.meta_key = '_fikup_lang' 
-                         AND m.meta_value = %s
-                         LIMIT 1",
-                        $slug, $post_type, $target_lang
-                    ));
-
-                    if ( $fuzzy_id ) {
-                        $final_url = self::get_clean_permalink( $fuzzy_id, $target_lang );
-                    }
+            if ( $is_currently_en ) {
+                // تبدیل انگلیسی به فارسی
+                if ( isset( $slug_map[ $current_slug ] ) ) {
+                    $home = rtrim( get_option( 'home' ), '/' );
+                    // ساخت لینک فارسی
+                    return $home . '/' . $slug_map[ $current_slug ] . '/'; 
+                }
+            } else {
+                // تبدیل فارسی به انگلیسی
+                $english_slug = array_search( $current_slug, $slug_map );
+                
+                if ( $english_slug ) {
+                    $home = rtrim( get_option( 'home' ), '/' );
+                    return $home . '/en/' . $english_slug . '/';
                 }
             }
         }
 
-        // ۳. فال‌بک به صفحه اصلی
-        if ( empty( $final_url ) ) {
-            $home = rtrim( home_url(), '/' ); // استفاده از home_url برای اطمینان از پروتکل
-            $final_url = ( $target_lang === 'en' ) ? $home . '/en/' : $home . '/';
-        }
+        // ۲. فال‌بک
+        global $wp;
+        $current_url = home_url( add_query_arg( array(), $wp->request ) );
+        return self::finalize_url( $current_url, $target_lang );
+    }
 
-        // ۴. پاکسازی نهایی و حیاتی (حذف/اضافه کردن EN)
+    private static function finalize_url( $url, $target_lang ) {
         if ( $target_lang === 'fa' ) {
-            return self::strip_en_prefix( $final_url );
+            return self::strip_en_prefix( $url );
         } else {
-            return self::inject_en_prefix( $final_url );
+            return self::inject_en_prefix( $url );
         }
     }
-
-    /**
-     * تابع کمکی برای دریافت لینک تمیز از ID
-     */
-    private static function get_clean_permalink( $id, $target_lang ) {
-        $url = get_permalink( $id );
-        if ( strpos( $url, 'page_id=' ) !== false || strpos( $url, '?p=' ) !== false ) {
-            $slug_path = get_page_uri( $id );
-            if ( $slug_path ) {
-                $home = rtrim( home_url(), '/' );
-                $url = ( $target_lang === 'en' ) ? $home . '/en/' . $slug_path . '/' : $home . '/' . $slug_path . '/';
-            }
-        }
-        return $url;
-    }
-
-    // --- توابع کمکی (اصلاح شده برای پروتکل) ---
 
     private static function inject_en_prefix( $url ) {
         if ( strpos( $url, '/en/' ) !== false ) return $url;
-        
-        $home = rtrim( home_url(), '/' );
-        // جایگزینی هوشمند که به http/https کاری ندارد
-        $url_parts = parse_url( $url );
-        $home_parts = parse_url( $home );
-        
-        if ( isset( $url_parts['path'] ) ) {
-            // اضافه کردن /en به اول path
-            $new_path = '/en' . '/' . ltrim( $url_parts['path'], '/' );
-            // بازسازی URL
-            $scheme = isset($url_parts['scheme']) ? $url_parts['scheme'] . '://' : (isset($home_parts['scheme']) ? $home_parts['scheme'] . '://' : '//');
-            $host = isset($url_parts['host']) ? $url_parts['host'] : (isset($home_parts['host']) ? $home_parts['host'] : '');
-            return $scheme . $host . rtrim($new_path, '/') . '/';
-        }
-        
-        return $home . '/en/';
+        $home = rtrim( get_option( 'home' ), '/' );
+        return str_replace( $home, $home . '/en', $url );
     }
 
     private static function strip_en_prefix( $url ) {
-        // روش تهاجمی: حذف /en/ از هر جای آدرس
-        // این روش بسیار مطمئن‌تر از strpos ساده است
-        $url = str_replace( '/en/', '/', $url );
-        
-        // اگر آدرس با /en تمام شد (مثل صفحه اصلی انگلیسی)
-        if ( substr( $url, -3 ) === '/en' ) {
-            $url = substr( $url, 0, -3 );
-        }
-        
-        return $url;
+        return str_replace( '/en/', '/', $url );
     }
 
-    // --- سایر توابع ---
-
+    // --- سایر متدها ---
     public function set_locale( $locale ) {
         $is_en = false;
         if ( isset( $_SERVER['REQUEST_URI'] ) ) {
@@ -256,7 +229,7 @@ class Fikup_Poly_Language {
     public function filter_home_url( $url, $path ) {
         if ( self::$current_lang === 'en' ) {
             if ( strpos( $url, '/en/' ) !== false ) return $url;
-            $home_root = rtrim( home_url(), '/' );
+            $home_root = rtrim( get_option( 'home' ), '/' );
             if ( $url === $home_root || $url === $home_root . '/' ) return $home_root . '/en/';
             return str_replace( $home_root, $home_root . '/en', $url );
         }
