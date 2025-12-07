@@ -10,12 +10,19 @@ class Fikup_Poly_Language {
         add_filter( 'query_vars', [ $this, 'register_query_vars' ] );
         add_filter( 'rewrite_rules_array', [ $this, 'add_en_rewrite_rules' ] );
         
-        // فیلترهای لینک‌دهی
+        // فیلترهای لینک‌دهی عمومی
         add_filter( 'post_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'page_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'post_type_link', [ $this, 'filter_permalink' ], 10, 2 );
         add_filter( 'term_link', [ $this, 'filter_term_link' ], 10, 2 );
         add_filter( 'home_url', [ $this, 'filter_home_url' ], 10, 2 );
+        
+        // --- فیلترهای اختصاصی ووکامرس و وودمارت (جدید) ---
+        add_filter( 'woocommerce_get_cart_url', [ $this, 'force_en_url' ] );
+        add_filter( 'woocommerce_get_checkout_url', [ $this, 'force_en_url' ] );
+        add_filter( 'woocommerce_get_shop_url', [ $this, 'force_en_url' ] );
+        add_filter( 'woodmart_get_wishlist_url', [ $this, 'force_en_url' ] );
+        add_filter( 'woodmart_get_compare_url', [ $this, 'force_en_url' ] );
         
         add_filter( 'request', [ $this, 'intercept_request_for_translation' ] );
         add_filter( 'redirect_canonical', [ $this, 'prevent_canonical_redirect' ], 10, 2 );
@@ -23,45 +30,37 @@ class Fikup_Poly_Language {
     }
 
     /**
-     * تابع تولید لینک نسخه مخالف (اصلاح شده برای نادیده گرفتن زباله‌ها)
+     * تابع جدید: مجبور کردن لینک‌های خاص به انگلیسی
      */
+    public function force_en_url( $url ) {
+        if ( self::is_english() ) {
+            return $this->inject_en_prefix( $url );
+        }
+        return $url;
+    }
+
     public static function get_translated_url() {
         $is_currently_en = self::is_english();
         $target_lang = $is_currently_en ? 'fa' : 'en';
 
-        // ۱. اگر در صفحه تکی (پست، برگه، محصول) هستیم
         if ( is_singular() ) {
             $current_id = get_the_ID();
             $group_id = get_post_meta( $current_id, '_fikup_translation_group', true );
             
             if ( $group_id ) {
                 global $wpdb;
-                // کوئری اصلاح شده: اتصال به جدول posts برای چک کردن وضعیت publish
                 $target_id = $wpdb->get_var( $wpdb->prepare(
-                    "SELECT m.post_id 
-                     FROM $wpdb->postmeta m
-                     INNER JOIN $wpdb->posts p ON m.post_id = p.ID
-                     WHERE m.meta_key = '_fikup_translation_group' 
-                     AND m.meta_value = %s 
-                     AND m.post_id != %d 
-                     AND p.post_status = 'publish' 
-                     LIMIT 1",
+                    "SELECT m.post_id FROM $wpdb->postmeta m INNER JOIN $wpdb->posts p ON m.post_id = p.ID WHERE m.meta_key = '_fikup_translation_group' AND m.meta_value = %s AND m.post_id != %d AND p.post_status = 'publish' LIMIT 1",
                     $group_id, $current_id
                 ));
 
                 if ( $target_id ) {
                     $url = get_permalink( $target_id );
-                    
-                    // فیکس لینک‌های زشت (?page_id=)
                     if ( strpos( $url, 'page_id=' ) !== false || strpos( $url, '?p=' ) !== false ) {
                         $slug_path = get_page_uri( $target_id );
                         if ( $slug_path ) {
                             $home = rtrim( get_option( 'home' ), '/' );
-                            if ( $target_lang === 'en' ) {
-                                $url = $home . '/en/' . $slug_path . '/';
-                            } else {
-                                $url = $home . '/' . $slug_path . '/';
-                            }
+                            $url = ( $target_lang === 'en' ) ? $home . '/en/' . $slug_path . '/' : $home . '/' . $slug_path . '/';
                         }
                     }
                     return $url;
@@ -69,7 +68,6 @@ class Fikup_Poly_Language {
             }
         }
 
-        // ۲. فال‌بک به صفحه اصلی
         $home = rtrim( get_option( 'home' ), '/' );
         return ( $target_lang === 'en' ) ? $home . '/en/' : $home . '/';
     }
@@ -126,16 +124,8 @@ class Fikup_Poly_Language {
 
             if ( $target_slug ) {
                 global $wpdb;
-                // اصلاح کوئری: فقط پست‌های منتشر شده را پیدا کن
                 $direct_en_post = $wpdb->get_var( $wpdb->prepare(
-                    "SELECT ID FROM $wpdb->posts 
-                     INNER JOIN $wpdb->postmeta ON ($wpdb->posts.ID = $wpdb->postmeta.post_id) 
-                     WHERE post_name = %s 
-                     AND post_type = %s 
-                     AND post_status = 'publish'
-                     AND meta_key = '_fikup_lang' AND meta_value = 'en' 
-                     LIMIT 1", 
-                    $target_slug, $post_type
+                    "SELECT ID FROM $wpdb->posts INNER JOIN $wpdb->postmeta ON ($wpdb->posts.ID = $wpdb->postmeta.post_id) WHERE post_name = %s AND post_type = %s AND post_status = 'publish' AND meta_key = '_fikup_lang' AND meta_value = 'en' LIMIT 1", $target_slug, $post_type
                 ));
 
                 if ( $direct_en_post ) {
@@ -145,19 +135,7 @@ class Fikup_Poly_Language {
                     if ( $original_post ) {
                         $group_id = get_post_meta( $original_post->ID, '_fikup_translation_group', true );
                         if ( $group_id ) {
-                            // اصلاح کوئری: فقط پست‌های منتشر شده در گروه را پیدا کن
-                            $en_id = $wpdb->get_var( $wpdb->prepare( 
-                                "SELECT m.post_id 
-                                 FROM $wpdb->postmeta m
-                                 INNER JOIN $wpdb->posts p ON m.post_id = p.ID
-                                 WHERE m.meta_key = '_fikup_translation_group' 
-                                 AND m.meta_value = %s 
-                                 AND m.post_id != %d 
-                                 AND p.post_status = 'publish'
-                                 LIMIT 1", 
-                                $group_id, $original_post->ID 
-                            ));
-                            
+                            $en_id = $wpdb->get_var( $wpdb->prepare( "SELECT m.post_id FROM $wpdb->postmeta m INNER JOIN $wpdb->posts p ON m.post_id = p.ID WHERE m.meta_key = '_fikup_translation_group' AND m.meta_value = %s AND m.post_id != %d AND p.post_status = 'publish' LIMIT 1", $group_id, $original_post->ID ));
                             if ( $en_id ) {
                                 if( $post_type == 'page' ) $vars['page_id'] = $en_id; else $vars['p'] = $en_id;
                                 unset( $vars['pagename'] ); unset( $vars['name'] );
@@ -178,16 +156,10 @@ class Fikup_Poly_Language {
     public function filter_permalink( $url, $post ) {
         $post = get_post( $post );
         if ( ! $post ) return $url;
-        
         $lang = get_post_meta( $post->ID, '_fikup_lang', true );
         
-        if ( $lang === 'en' ) {
-            return $this->inject_en_prefix( $url );
-        }
-        
-        if ( $lang !== 'en' ) {
-            return $this->strip_en_prefix( $url );
-        }
+        if ( $lang === 'en' ) return $this->inject_en_prefix( $url );
+        if ( $lang !== 'en' ) return $this->strip_en_prefix( $url );
         
         return $url;
     }
@@ -216,9 +188,7 @@ class Fikup_Poly_Language {
     private function strip_en_prefix( $url ) {
         $home = rtrim( get_option( 'home' ), '/' );
         $home_en = $home . '/en';
-        if ( strpos( $url, $home_en ) === 0 ) {
-            return str_replace( $home_en, $home, $url );
-        }
+        if ( strpos( $url, $home_en ) === 0 ) return str_replace( $home_en, $home, $url );
         return $url;
     }
 

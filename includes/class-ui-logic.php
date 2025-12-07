@@ -8,7 +8,7 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
-        // ۱. پروتکل سکوت برای ایجکس
+        // ۱. جلوگیری از خطای ایجکس
         if ( wp_doing_ajax() ) {
             @error_reporting(0);
             @ini_set('display_errors', 0);
@@ -23,6 +23,7 @@ class Fikup_Poly_UI_Logic {
             }, 0 );
         }
 
+        // بارگذاری ترجمه‌ها
         $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
             foreach($saved_strings as $item) {
@@ -32,8 +33,10 @@ class Fikup_Poly_UI_Logic {
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
         $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        add_filter( 'gettext', [ $this, 'universal_translator' ], 9999, 3 );
-        add_filter( 'gettext_with_context', [ $this, 'universal_translator_context' ], 9999, 4 );
+        // --- سیستم جدید: بافر خروجی برای ترجمه قطعی ---
+        add_action( 'template_redirect', [ $this, 'start_output_buffer' ], 1 );
+
+        // هوک‌های قالب
         add_filter( 'woodmart_option', [ $this, 'translate_theme_options' ], 999, 2 );
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
@@ -43,22 +46,41 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * تشخیص زبان (اصلاح شده)
+     * شروع بافرینگ اگر در نسخه انگلیسی هستیم
      */
+    public function start_output_buffer() {
+        // فقط در حالت انگلیسی و فقط برای درخواست‌های HTML عادی (نه ایجکس)
+        if ( $this->is_english() && ! wp_doing_ajax() && ! is_admin() ) {
+            ob_start( [ $this, 'process_html_buffer' ] );
+        }
+    }
+
+    /**
+     * پردازش نهایی HTML قبل از نمایش به کاربر
+     * اینجا هر متنی که پیدا کنیم را به زور عوض می‌کنیم
+     */
+    public function process_html_buffer( $buffer ) {
+        if ( empty( $buffer ) ) return $buffer;
+
+        // ۱. اعمال ترجمه‌های کاربر (حلقه ترجمه)
+        if ( ! empty( $this->translations_map ) ) {
+            $keys = array_keys( $this->translations_map );
+            $values = array_values( $this->translations_map );
+            
+            // جایگزینی ساده متن‌ها (مراقب تداخل تگ‌های HTML باشید)
+            $buffer = str_replace( $keys, $values, $buffer );
+        }
+
+        return $buffer;
+    }
+
     private function is_english() {
-        // ۱. پارامتر مستقیم در URL
         if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) return true;
-
-        // ۲. ساختار آدرس (مهم‌ترین شرط)
         if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) return true;
-
-        // ۳. بررسی رفرر (فقط و فقط برای درخواست‌های AJAX)
-        // تغییر مهم: این شرط باعث باگ شما شده بود چون در لود معمولی هم چک می‌شد
         if ( wp_doing_ajax() ) {
             $referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '';
             if ( strpos( $referer, '/en/' ) !== false ) return true;
         }
-
         return false;
     }
 
@@ -68,13 +90,9 @@ class Fikup_Poly_UI_Logic {
 
     public function force_english_ajax_url() {
         if ( ! $this->is_english() ) return;
-
         $script = "
-            if ( typeof wc_cart_fragments_params === 'undefined' ) {
-                var wc_cart_fragments_params = {};
-            }
+            if ( typeof wc_cart_fragments_params === 'undefined' ) { var wc_cart_fragments_params = {}; }
             wc_cart_fragments_params.fragment_name = 'wc_fragments_en_';
-            
             if ( typeof wc_cart_fragments_params.wc_ajax_url !== 'undefined' ) {
                 var base = wc_cart_fragments_params.wc_ajax_url;
                 if ( base.indexOf('/en/') === -1 && base.indexOf('lang=en') === -1 ) {
@@ -87,8 +105,7 @@ class Fikup_Poly_UI_Logic {
         echo '<style>body.fikup-en-mode { font-family: "Roboto", sans-serif !important; direction: ltr !important; }</style>';
     }
 
-    // --- توابع ترجمه ---
-
+    // --- توابع حذف فایل زبان ---
     public function unload_persian_translations( $mofile, $domain ) {
         if ( ! $this->is_english() ) return $mofile;
         $blocked = [ 'woodmart', 'woocommerce', 'woodmart-core', 'woocommerce-persian', 'persian-woocommerce', 'wooc-fa' ];
@@ -97,24 +114,13 @@ class Fikup_Poly_UI_Logic {
         return $mofile;
     }
 
-    public function universal_translator( $translated, $text, $domain ) {
-        if ( ! $this->is_english() ) return $translated;
-        $clean = trim( $translated );
-        if ( isset( $this->translations_map[ $clean ] ) ) return $this->translations_map[ $clean ];
-        if ( isset( $this->translations_map[ trim($text) ] ) ) return $this->translations_map[ trim($text) ];
-        return $translated;
-    }
-    public function universal_translator_context( $translated, $text, $context, $domain ) { return $this->universal_translator( $translated, $text, $domain ); }
-
     public function translate_theme_options( $value, $slug ) {
         if ( ! $this->is_english() ) return $value;
         if ( $slug === 'footer_content_type' ) return 'html_block';
         if ( $slug === 'footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
-        if ( is_string( $value ) && isset( $this->translations_map[ trim($value) ] ) ) return $this->translations_map[ trim($value) ];
         
         $defaults = [ 'empty_cart_text', 'mini_cart_view_cart_text', 'mini_cart_checkout_text', 'btn_view_cart_text', 'btn_checkout_text', 'copyrights' ];
         if ( in_array( $slug, $defaults ) ) return '';
-        
         return $value;
     }
 
