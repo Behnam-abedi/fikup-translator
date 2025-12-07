@@ -16,18 +16,20 @@ class Fikup_Poly_Settings {
     }
 
     public function register_settings() {
+        // تنظیمات عمومی
         register_setting( 'fikup_poly_general_group', 'fikup_woodmart_header_id' );
         register_setting( 'fikup_poly_general_group', 'fikup_woodmart_footer_id' );
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
-        // تنظیمات دیزاین سوئیچر
+        // تنظیمات دیزاین سوئیچر (بخش اصلاح شده)
+        // قبلاً آرگومان اول (نام گروه) در خطوط پایین جا افتاده بود که باعث ارور می‌شد
         register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_bg_color' );
-        register_setting( 'fikup_poly_switcher_text_color' );
-        register_setting( 'fikup_poly_switcher_active_bg' );
-        register_setting( 'fikup_poly_switcher_active_text' );
-        register_setting( 'fikup_poly_switcher_radius' );
-        register_setting( 'fikup_poly_switcher_padding' );
+        register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_text_color' );
+        register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_active_bg' );
+        register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_active_text' );
+        register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_radius' );
+        register_setting( 'fikup_poly_switcher_group', 'fikup_switcher_padding' );
 
         // حلقه ترجمه
         register_setting( 'fikup_poly_strings_group', 'fikup_translations_list', [ 
