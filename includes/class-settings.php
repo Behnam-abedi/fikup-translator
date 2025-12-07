@@ -27,11 +27,12 @@ class Fikup_Poly_Settings {
         if ( ! $screen || strpos( $screen->id, 'fikup' ) === false ) return;
         ?>
         <div class="notice notice-info is-dismissible">
-            <p><strong>نکته مهم برای ترجمه:</strong></p>
-            <p>
-                در فیلد <strong>"متن اصلی"</strong>، باید دقیقاً کلمه انگلیسی که در کد قالب وجود دارد (مثلاً <code>Cart</code> یا <code>Subtotal</code>) را وارد کنید.<br>
-                اگر کلمه فارسی (مثلاً "سبد خرید") را وارد کنید، ترجمه کار نخواهد کرد، زیرا در حالت انگلیسی، وردپرس اصلا کلمات فارسی را نمی‌بیند.
-            </p>
+            <p><strong>راهنمای ترجمه هوشمند:</strong></p>
+            <p>در اینجا هر متنی که در سایت فارسی می‌بینید و می‌خواهید در انگلیسی تغییر کند را وارد کنید.</p>
+            <ul>
+                <li><strong>متن اصلی:</strong> دقیقاً همان چیزی که الان در سایت می‌بینید (مثلاً: <code>تومان</code> یا <code>سبد خرید شما خالی است</code>).</li>
+                <li><strong>ترجمه:</strong> متنی که می‌خواهید در نسخه انگلیسی نمایش داده شود (مثلاً: <code>Toman</code>).</li>
+            </ul>
         </div>
         <?php
     }
@@ -43,36 +44,36 @@ class Fikup_Poly_Settings {
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
-        // تنظیمات ترجمه (با تابع تمیزکننده)
+        // لیست ترجمه‌های هوشمند
         register_setting( 'fikup_poly_strings_group', 'fikup_string_translations', [ 
             'type' => 'array',
-            'sanitize_callback' => [ $this, 'sanitize_translations' ]
+            'sanitize_callback' => [ $this, 'sanitize_array_data' ]
         ] );
     }
 
-    public function sanitize_translations( $input ) {
+    public function sanitize_array_data( $input ) {
         $clean = [];
         if ( is_array( $input ) ) {
             foreach ( $input as $item ) {
-                if ( ! empty( $item['org'] ) && ! empty( $item['trans'] ) ) {
+                if ( ! empty( $item['key'] ) ) {
                     $clean[] = [
-                        'org'   => sanitize_text_field( $item['org'] ), // حفظ فاصله و کاراکترها
-                        'trans' => sanitize_text_field( $item['trans'] )
+                        'key' => sanitize_text_field( $item['key'] ), // متن اصلی (فارسی یا انگلیسی)
+                        'val' => wp_kses_post( $item['val'] ) // ترجمه (انگلیسی)
                     ];
                 }
             }
         }
-        return $clean; // بازگرداندن آرایه تمیز و ایندکس شده
+        return $clean;
     }
 
     public function render_settings_page() {
         $active_tab = isset( $_GET['tab'] ) ? $_GET['tab'] : 'general';
         ?>
         <div class="wrap">
-            <h1>تنظیمات سیستم چندزبانه Fikup</h1>
+            <h1>سیستم چندزبانه Fikup (نسخه هوشمند)</h1>
             <h2 class="nav-tab-wrapper">
                 <a href="?page=fikup-poly&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">تنظیمات اصلی</a>
-                <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">ترجمه کلمات</a>
+                <a href="?page=fikup-poly&tab=strings" class="nav-tab <?php echo $active_tab == 'strings' ? 'nav-tab-active' : ''; ?>">مدیریت ترجمه‌ها</a>
             </h2>
             <form method="post" action="options.php">
                 <?php 
@@ -116,62 +117,53 @@ class Fikup_Poly_Settings {
     private function render_strings_tab() {
         $translations = get_option( 'fikup_string_translations', [] );
         ?>
-        <div id="strings-container">
-            <table class="widefat fixed striped" style="max-width: 800px;">
+        <div id="strings-wrapper">
+            <table class="widefat fixed striped" style="max-width: 1000px;">
                 <thead>
                     <tr>
-                        <th>متن اصلی (انگلیسی داخل کد)</th>
-                        <th>ترجمه نمایشی (انگلیسی دلخواه)</th>
-                        <th style="width: 60px;">حذف</th>
+                        <th style="width: 45%;">متن اصلی (همان چیزی که الان در سایت می‌بینید)</th>
+                        <th style="width: 45%;">ترجمه انگلیسی</th>
+                        <th style="width: 50px;">حذف</th>
                     </tr>
                 </thead>
                 <tbody id="strings-list">
                     <?php 
                     if ( ! empty( $translations ) && is_array( $translations ) ) {
                         foreach ( $translations as $i => $item ) {
-                            $this->render_string_row( $i, $item['org'], $item['trans'] );
+                            $this->render_row( $i, $item['key'], $item['val'] );
                         }
                     }
                     ?>
                 </tbody>
             </table>
-            <br>
-            <button type="button" class="button" id="add-new-row">+ افزودن سطر جدید</button>
+            <br><button type="button" class="button" id="add-string">+ افزودن مورد جدید</button>
         </div>
-
-        <script type="text/template" id="row-template">
+        
+        <script type="text/template" id="tmpl-row">
             <tr>
-                <td><input type="text" name="fikup_string_translations[INDEX][org]" class="widefat" placeholder="مثال: Cart"></td>
-                <td><input type="text" name="fikup_string_translations[INDEX][trans]" class="widefat" placeholder="مثال: Bag"></td>
+                <td><input type="text" name="fikup_string_translations[INDEX][key]" class="widefat" placeholder="مثال: تومان"></td>
+                <td><input type="text" name="fikup_string_translations[INDEX][val]" class="widefat" placeholder="مثال: Toman"></td>
                 <td><button type="button" class="button remove-row" style="color: #a00;">X</button></td>
             </tr>
         </script>
-
         <script>
             jQuery(document).ready(function($) {
-                // افزودن سطر
-                $('#add-new-row').on('click', function() {
-                    var index = $('#strings-list tr').length + 1000; // ایندکس یونیک
-                    var template = $('#row-template').html().replace(/INDEX/g, index);
-                    $('#strings-list').append(template);
+                $('#add-string').click(function() {
+                    var idx = $('#strings-list tr').length + Date.now();
+                    var html = $('#tmpl-row').html().replace(/INDEX/g, idx);
+                    $('#strings-list').append(html);
                 });
-
-                // حذف سطر (از طریق Delegation برای سطرهای جدید)
-                $('#strings-list').on('click', '.remove-row', function() {
-                    if(confirm('آیا مطمئن هستید؟ (برای اعمال نهایی باید دکمه ذخیره را بزنید)')) {
-                        $(this).closest('tr').remove();
-                    }
-                });
+                $('body').on('click', '.remove-row', function() { $(this).closest('tr').remove(); });
             });
         </script>
         <?php
     }
 
-    private function render_string_row( $index, $org, $trans ) {
+    private function render_row( $index, $key, $val ) {
         ?>
         <tr>
-            <td><input type="text" name="fikup_string_translations[<?php echo $index; ?>][org]" value="<?php echo esc_attr( $org ); ?>" class="widefat"></td>
-            <td><input type="text" name="fikup_string_translations[<?php echo $index; ?>][trans]" value="<?php echo esc_attr( $trans ); ?>" class="widefat"></td>
+            <td><input type="text" name="fikup_string_translations[<?php echo $index; ?>][key]" value="<?php echo esc_attr( $key ); ?>" class="widefat"></td>
+            <td><input type="text" name="fikup_string_translations[<?php echo $index; ?>][val]" value="<?php echo esc_attr( $val ); ?>" class="widefat"></td>
             <td><button type="button" class="button remove-row" style="color: #a00;">X</button></td>
         </tr>
         <?php
