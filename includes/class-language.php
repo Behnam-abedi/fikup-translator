@@ -38,14 +38,16 @@ class Fikup_Poly_Language {
             self::$current_lang = 'en';
             
             // ست کردن کوکی برای استفاده در درخواست‌های بعدی و آژاکس
-            if ( ! is_admin() && ( ! isset( $_COOKIE['fikup_lang'] ) || $_COOKIE['fikup_lang'] !== 'en' ) ) {
+            // تغییر: اضافه شدن شرط ! wp_doing_ajax() برای جلوگیری از اختلال در درخواست‌های ایجکس
+            if ( ! is_admin() && ! wp_doing_ajax() && ( ! isset( $_COOKIE['fikup_lang'] ) || $_COOKIE['fikup_lang'] !== 'en' ) ) {
                 setcookie( 'fikup_lang', 'en', time() + 3600 * 24 * 30, '/' );
                 $_COOKIE['fikup_lang'] = 'en';
             }
             return 'en_US';
         } else {
             // اگر انگلیسی نیست، کوکی را به فارسی برگردان
-            if ( ! is_admin() && isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
+            // تغییر: اضافه شدن شرط ! wp_doing_ajax()
+            if ( ! is_admin() && ! wp_doing_ajax() && isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
                 setcookie( 'fikup_lang', 'fa', time() + 3600 * 24 * 30, '/' );
                 $_COOKIE['fikup_lang'] = 'fa';
             }

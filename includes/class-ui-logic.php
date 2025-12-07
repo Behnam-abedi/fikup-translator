@@ -56,11 +56,18 @@ class Fikup_Poly_UI_Logic {
             if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
                 return true;
             }
-            return false; // اگر /en/ ندارد، قطعاً فارسی است (حتی اگر کوکی باشد)
+            return false; // اگر /en/ ندارد، قطعاً فارسی است
         }
 
-        // 3. درخواست‌های AJAX (مثل سبد خرید): بررسی Referer
+        // 3. درخواست‌های AJAX (مثل سبد خرید): بررسی کوکی و Referer
         if ( wp_doing_ajax() || isset( $_GET['wc-ajax'] ) ) {
+            
+            // اصلاح مهم: اولویت با کوکی است (چون دقیق‌تر از Referer است)
+            if ( isset( $_COOKIE['fikup_lang'] ) ) {
+                return $_COOKIE['fikup_lang'] === 'en';
+            }
+
+            // فال‌بک: اگر کوکی نبود، به Referer نگاه کن
             if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) {
                 return true;
             }
@@ -161,8 +168,6 @@ class Fikup_Poly_UI_Logic {
         ?>
         <script>
         (function() {
-            // این اسکریپت فقط برای کمک به درخواست‌های ایجکس بعدی است
-            // و تاثیری روی لود اولیه صفحه ندارد (که امن‌تر است)
             var isEn = window.location.pathname.indexOf('/en/') !== -1;
             if ( isEn ) {
                 if ( typeof jQuery !== 'undefined' ) {
