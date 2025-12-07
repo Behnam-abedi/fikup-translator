@@ -8,9 +8,28 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
-        // ۱. غیرفعال کردن نمایش خطاها (حیاتی برای سالم ماندن ایجکس)
+        // --- 1. پروتکل پاکسازی (The Cleaner Logic) ---
+        // این بخش حیاتی است. تمام نویزهای قالب را حذف می‌کند تا ایجکس سالم بماند.
         if ( wp_doing_ajax() ) {
-            @ini_set( 'display_errors', 0 );
+            // خاموش کردن گزارش خطا
+            error_reporting(0);
+            @ini_set('display_errors', 0);
+            
+            // شروع ضبط خروجی (برای اینکه خطاهای قالب چاپ نشوند)
+            ob_start();
+            
+            // پاکسازی بافر قبل از شات‌داون (تمیز کردن نهایی)
+            add_action( 'shutdown', function() {
+                // اگر طول بافر خیلی زیاد بود (یعنی خطا چاپ شده)، پاکش کن
+                // اما اگر خروجی استاندارد ووکامرس بود، کاری نداشته باش
+                if ( ob_get_length() > 0 ) {
+                    $output = ob_get_contents();
+                    // یک چک ساده: اگر خروجی جیسون نبود ولی پر بود، احتمالاً خطاست
+                    if ( strpos( trim($output), '{' ) !== 0 && strpos( trim($output), '[' ) !== 0 ) {
+                        ob_clean(); // دور ریختن خطاها
+                    }
+                }
+            }, 0 );
         }
 
         // لود تنظیمات ترجمه
@@ -32,16 +51,13 @@ class Fikup_Poly_UI_Logic {
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
 
-        // --- شاهکار جداسازی (Isolation Logic) ---
-        // ۱. جداسازی هش در سمت سرور
-        add_filter( 'woocommerce_cart_hash', [ $this, 'server_side_hash_split' ] );
-
-        // ۲. جداسازی سطل‌های ذخیره‌سازی در سمت کلاینت (مرورگر)
-        add_action( 'wp_enqueue_scripts', [ $this, 'isolate_client_fragments' ], 20 );
+        // --- مدیریت ایجکس و کش ---
+        add_filter( 'woocommerce_cart_hash', [ $this, 'split_cart_hash_by_lang' ] );
+        add_action( 'wp_enqueue_scripts', [ $this, 'force_refresh_script' ], 20 );
     }
 
     /**
-     * تشخیص زبان
+     * تشخیص زبان (فقط بر اساس Referer برای ایجکس)
      */
     private function is_english() {
         if ( ! wp_doing_ajax() ) {
@@ -52,37 +68,57 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * جداسازی سرور: هر زبان، هش مخصوص خودش را دارد.
+     * جداسازی هش سبد خرید
      */
-    public function server_side_hash_split( $hash ) {
+    public function split_cart_hash_by_lang( $hash ) {
         $lang = $this->is_english() ? 'en' : 'fa';
         return $hash . '-' . $lang;
     }
 
     /**
-     * جداسازی کلاینت: تغییر نام کلیدهای ذخیره‌سازی ووکامرس
-     * این باعث می‌شود تداخل کش بین دو زبان غیرممکن شود.
+     * اسکریپت رفرش اجباری
+     * این اسکریپت در فرانت اجرا می‌شود و مطمئن می‌شود که اگر زبان عوض شده، کش پاک شود.
      */
-    public function isolate_client_fragments() {
-        $lang = $this->is_english() ? 'en' : 'fa';
-        
-        // این اسکریپت دقیقاً قبل از فایل اصلی ووکامرس اجرا می‌شود
-        // و تنظیمات آن را تغییر می‌دهد تا در "سطل" دیگری ذخیره کند.
-        $script = "
-            if ( typeof wc_cart_fragments_params === 'undefined' ) {
-                var wc_cart_fragments_params = {};
-            }
-            // تغییر نام کلید ذخیره‌سازی (مثلاً: wc_fragments_fa_...)
-            wc_cart_fragments_params.fragment_name = 'wc_fragments_" . $lang . "_';
+    public function force_refresh_script() {
+        ?>
+        <script>
+        (function() {
+            var isEn = window.location.pathname.indexOf('/en/') !== -1;
+            var currentLang = isEn ? 'en' : 'fa';
+            var key = 'fikup_cleaner_state';
             
-            // اجبار به استفاده از آدرس ایجکس زبان‌دار
-            // wc_cart_fragments_params.wc_ajax_url = '" . esc_js( add_query_arg( 'lang', $lang, WC()->ajax_url() ) ) . "';
-        ";
-        
-        wp_add_inline_script( 'wc-cart-fragments', $script, 'before' );
+            try {
+                var last = localStorage.getItem(key);
+                if ( last !== currentLang ) {
+                    // پاکسازی کامل کش‌ها
+                    sessionStorage.removeItem('wc_fragments_hash');
+                    sessionStorage.removeItem('wc_fragments');
+                    
+                    // ذخیره وضعیت جدید
+                    localStorage.setItem(key, currentLang);
+                    
+                    // رفرش ووکامرس (با تاخیر کم برای اطمینان)
+                    setTimeout(function(){
+                        if(typeof jQuery != 'undefined') {
+                            jQuery(document.body).trigger('wc_fragment_refresh');
+                        }
+                    }, 200);
+                }
+            } catch(e){}
+
+            // استایل‌های انگلیسی
+            if(isEn) {
+                var s = document.createElement('style');
+                s.innerHTML = 'body.fikup-en-mode { font-family: "Roboto", sans-serif !important; }';
+                document.head.appendChild(s);
+                document.body.classList.add('fikup-en-mode');
+            }
+        })();
+        </script>
+        <?php
     }
 
-    // --- توابع ترجمه و قالب ---
+    // --- توابع ترجمه ---
     public function universal_translator( $translated, $text, $domain ) {
         if ( ! $this->is_english() ) return $translated;
         $clean = trim( $translated );
@@ -90,9 +126,7 @@ class Fikup_Poly_UI_Logic {
         if ( isset( $this->translations_map[ trim($text) ] ) ) return $this->translations_map[ trim($text) ];
         return $translated;
     }
-    public function universal_translator_context( $translated, $text, $context, $domain ) {
-        return $this->universal_translator( $translated, $text, $domain );
-    }
+    public function universal_translator_context( $translated, $text, $context, $domain ) { return $this->universal_translator( $translated, $text, $domain ); }
     public function translate_theme_options( $value, $slug ) {
         if ( ! $this->is_english() ) return $value;
         if ( $slug === 'footer_content_type' ) return 'html_block';
