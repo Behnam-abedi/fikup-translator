@@ -23,7 +23,7 @@ class Fikup_Poly_UI_Logic {
             }, 0 );
         }
 
-        // بارگذاری ترجمه‌ها
+        // بارگذاری ترجمه‌های متنی
         $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
             foreach($saved_strings as $item) {
@@ -33,10 +33,10 @@ class Fikup_Poly_UI_Logic {
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
         $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        // --- سیستم جدید: بافر خروجی برای ترجمه قطعی ---
+        // --- سیستم بافر خروجی (مهم‌ترین بخش) ---
         add_action( 'template_redirect', [ $this, 'start_output_buffer' ], 1 );
 
-        // هوک‌های قالب
+        // هوک‌های قالب و ووکامرس
         add_filter( 'woodmart_option', [ $this, 'translate_theme_options' ], 999, 2 );
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
@@ -45,33 +45,83 @@ class Fikup_Poly_UI_Logic {
         add_action( 'wp_enqueue_scripts', [ $this, 'force_english_ajax_url' ], 20 );
     }
 
-    /**
-     * شروع بافرینگ اگر در نسخه انگلیسی هستیم
-     */
     public function start_output_buffer() {
-        // فقط در حالت انگلیسی و فقط برای درخواست‌های HTML عادی (نه ایجکس)
+        // فقط در حالت انگلیسی و درخواست‌های غیر ایجکس
         if ( $this->is_english() && ! wp_doing_ajax() && ! is_admin() ) {
             ob_start( [ $this, 'process_html_buffer' ] );
         }
     }
 
     /**
-     * پردازش نهایی HTML قبل از نمایش به کاربر
-     * اینجا هر متنی که پیدا کنیم را به زور عوض می‌کنیم
+     * پردازش نهایی HTML: اینجا لینک‌ها و متن‌ها را اصلاح می‌کنیم
      */
     public function process_html_buffer( $buffer ) {
         if ( empty( $buffer ) ) return $buffer;
 
-        // ۱. اعمال ترجمه‌های کاربر (حلقه ترجمه)
+        // ۱. اصلاح لینک‌های سیستمی خراب (سبد خرید، علاقه‌مندی و...)
+        $buffer = $this->fix_broken_system_links( $buffer );
+
+        // ۲. اعمال ترجمه‌های متنی کاربر
         if ( ! empty( $this->translations_map ) ) {
             $keys = array_keys( $this->translations_map );
             $values = array_values( $this->translations_map );
-            
-            // جایگزینی ساده متن‌ها (مراقب تداخل تگ‌های HTML باشید)
             $buffer = str_replace( $keys, $values, $buffer );
         }
 
         return $buffer;
+    }
+
+    /**
+     * تابع جدید: تعمیر لینک‌های سیستمی که قاطی شده‌اند
+     */
+    private function fix_broken_system_links( $content ) {
+        // لیست صفحات مهم (لینک فارسی => لینک انگلیسی)
+        // شما می‌توانید اسلاگ‌های انگلیسی را متناسب با سایت خود تغییر دهید
+        $maps = [
+            // سبد خرید
+            'سبد-خرید' => 'cart',
+            '%d8%b3%d8%a8%d8%af-%d8%ae%d8%b1%db%8c%d8%af' => 'cart', // فرمت انکود شده
+            
+            // علاقه مندی ها (Woodmart Wishlist)
+            'علاقه-مندی-ها' => 'wishlist',
+            '%d8%b9%d9%84%d8%a7%d9%82%d9%87-%d9%85%d9%86%d8%af%db%8c-%d9%87%d8%a7' => 'wishlist',
+
+            // تسویه حساب
+            'تسویه-حساب' => 'checkout',
+            '%d8%aa%d8%b3%d9%88%db%8c%d9%87-%d8%ad%d8%b3%d8%a7%d8%a8' => 'checkout',
+
+            // فروشگاه
+            'فروشگاه' => 'shop',
+            '%d9%81%d8%b1%d9%88%d8%b4%da%af%d8%a7%d9%87' => 'shop',
+
+            // حساب کاربری
+            'حساب-کاربری-من' => 'my-account',
+            '%d8%ad%d8%b3%d8%a7%d8%a8-%da%a9%d8%a7%d8%b1%d8%a8%d8%b1%db%8c-%d9%85%d9%86' => 'my-account',
+        ];
+
+        $home_url = rtrim( get_option( 'home' ), '/' ); // مثلا https://fikup.ir
+
+        foreach ( $maps as $fa_slug => $en_slug ) {
+            // حالت ۱: لینک غلط ترکیبی (/en/سبد-خرید) -> تبدیل به (/en/cart)
+            $wrong_mixed = $home_url . '/en/' . $fa_slug . '/';
+            $correct_en  = $home_url . '/en/' . $en_slug . '/';
+            $content = str_replace( $wrong_mixed, $correct_en, $content );
+            
+            // حالت ۲: لینک فارسی خالص (/سبد-خرید) -> تبدیل به (/en/cart)
+            // این برای وقتی است که قالب وودمارت لینک فارسی را مستقیماً چاپ کرده
+            $pure_fa = $home_url . '/' . $fa_slug . '/';
+            $content = str_replace( $pure_fa, $correct_en, $content );
+
+            // حالت ۳: بدون اسلش انتهایی (جهت احتیاط)
+            $wrong_mixed_noslash = $home_url . '/en/' . $fa_slug;
+            $pure_fa_noslash = $home_url . '/' . $fa_slug;
+            $correct_en_noslash = $home_url . '/en/' . $en_slug;
+            
+            $content = str_replace( $wrong_mixed_noslash, $correct_en_noslash, $content );
+            $content = str_replace( $pure_fa_noslash, $correct_en_noslash, $content );
+        }
+
+        return $content;
     }
 
     private function is_english() {
