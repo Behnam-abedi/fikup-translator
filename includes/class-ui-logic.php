@@ -8,14 +8,12 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
-        // 1. بارگذاری ترجمه‌ها در یک آرایه برای جستجوی سریع
-        $saved_strings = get_option( 'fikup_string_translations', [] );
+        // 1. آماده‌سازی لیست ترجمه (Map) برای سرعت بالا
+        $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
             foreach($saved_strings as $item) {
-                if(!empty($item['key']) && !empty($item['val'])) {
-                    // کلید = متن اصلی (مثلاً "تومان")
-                    // مقدار = ترجمه (مثلاً "Toman")
-                    $key = trim( $item['key'] ); 
+                if(!empty($item['key'])) {
+                    $key = trim( $item['key'] ); // حذف فاصله برای مقایسه دقیق
                     $this->translations_map[ $key ] = $item['val'];
                 }
             }
@@ -24,40 +22,107 @@ class Fikup_Poly_UI_Logic {
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
         $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        // هوک‌های اصلی
+        // --- منطق تشخیص زبان و اعمال تغییرات ---
+        
+        // 1. ترجمه متن‌ها (هسته اصلی - مشابه ووکامرس فارسی)
+        add_filter( 'gettext', [ $this, 'universal_translator' ], PHP_INT_MAX, 3 );
+        add_filter( 'gettext_with_context', [ $this, 'universal_translator_context' ], PHP_INT_MAX, 4 );
+        add_filter( 'ngettext', [ $this, 'universal_translator_plural' ], PHP_INT_MAX, 5 );
+
+        // 2. ترجمه آپشن‌های قالب (مثل متن سبد خالی)
+        add_filter( 'woodmart_option', [ $this, 'translate_theme_options' ], 999, 2 );
+
+        // 3. هوک‌های تغییر ساختار (هدر/فوتر)
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
-        add_action( 'wp_head', [ $this, 'print_custom_css_and_js' ] );
+
+        // 4. غیرفعال کردن ترجمه‌های فارسی مزاحم
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
         add_filter( 'option_persian_woocommerce_replacements', [ $this, 'disable_persian_replacements' ] );
 
-        // --- بخش جدید: ترجمه هوشمند مقادیر ---
-        
-        // 1. ترجمه تنظیمات قالب WoodMart (مثل سبد خالی، کپی رایت و...)
-        add_filter( 'woodmart_option', [ $this, 'smart_translate_theme_options' ], 999, 2 );
-        
-        // 2. ترجمه واحد پول (تومان -> Toman)
-        add_filter( 'woocommerce_currency_symbol', [ $this, 'smart_translate_currency' ], 999, 2 );
-        
-        // 3. ترجمه متون کدنویسی شده (Gettext)
-        add_filter( 'gettext', [ $this, 'smart_translate_gettext' ], PHP_INT_MAX, 3 );
-        add_filter( 'gettext_with_context', [ $this, 'smart_translate_gettext_context' ], PHP_INT_MAX, 4 );
+        // 5. استایل‌ها و اسکریپت‌ها
+        add_action( 'wp_head', [ $this, 'print_custom_css_and_js' ] );
+
+        // 6. [جدید] فیکس کردن ایجکس سبد خرید وودمارت
+        add_filter( 'woocommerce_add_to_cart_fragments', [ $this, 'fix_ajax_cart_fragments' ], 999 );
     }
 
     /**
-     * ترجمه هوشمند تنظیمات قالب
-     * اگر مقدار تنظیم با یکی از "متن‌های اصلی" کاربر برابر بود، ترجمه کن.
+     * آیا الان باید انگلیسی باشیم؟ (منطق تشخیص بسیار دقیق)
      */
-    public function smart_translate_theme_options( $value, $slug ) {
+    private function is_english_context() {
+        // الف) پنل ادمین همیشه فارسی بماند (مگر اینکه ایجکس باشد)
+        if ( is_admin() && ! wp_doing_ajax() ) return false;
+
+        // ب) اگر در URL یا پارامترها نشانه انگلیسی باشد
+        if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) return true;
+        if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) return true;
+
+        // ج) بررسی Referer برای درخواست‌های AJAX (بسیار مهم برای سبد خرید)
+        if ( wp_doing_ajax() || isset( $_GET['wc-ajax'] ) ) {
+            if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) {
+                return true;
+            }
+            // اگر هدر سفارشی ما ارسال شده باشد (توسط JS)
+            if ( isset( $_SERVER['HTTP_X_FIKUP_LANG'] ) && $_SERVER['HTTP_X_FIKUP_LANG'] === 'en' ) {
+                return true;
+            }
+        }
+
+        // د) بررسی کوکی به عنوان آخرین راه حل
+        if ( isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
+            // یک چک نهایی: اگر کاربر الان در صفحه فارسی است، کوکی انگلیسی را نادیده بگیر
+            if ( ! wp_doing_ajax() && isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) === false ) {
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * مترجم سراسری (جایگزین کننده متن)
+     */
+    public function universal_translator( $translated, $text, $domain ) {
+        if ( ! $this->is_english_context() ) return $translated;
+
+        // 1. اگر خود متن ترجمه شده (فارسی) در لیست ما باشد
+        $clean_translated = trim( $translated );
+        if ( isset( $this->translations_map[ $clean_translated ] ) ) {
+            return $this->translations_map[ $clean_translated ];
+        }
+
+        // 2. اگر متن اصلی (انگلیسی) در لیست ما باشد
+        $clean_text = trim( $text );
+        if ( isset( $this->translations_map[ $clean_text ] ) ) {
+            return $this->translations_map[ $clean_text ];
+        }
+
+        return $translated;
+    }
+
+    public function universal_translator_context( $translated, $text, $context, $domain ) {
+        return $this->universal_translator( $translated, $text, $domain );
+    }
+
+    public function universal_translator_plural( $translation, $single, $plural, $number, $domain ) {
+        return $this->universal_translator( $translation, $single, $domain );
+    }
+
+    /**
+     * ترجمه آپشن‌های قالب (مثل متن سبد خالی)
+     */
+    public function translate_theme_options( $value, $slug ) {
         if ( ! $this->is_english_context() ) return $value;
 
         // تغییر اجباری فوتر
         if ( $slug === 'footer_content_type' ) return 'html_block';
         if ( $slug === 'footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
 
-        // اگر مقدار این تنظیم، در لیست ترجمه‌های کاربر وجود دارد، ترجمه را برگردان
+        // اگر متن این آپشن در لیست ترجمه‌های ما باشد، جایگزین کن
         if ( is_string( $value ) ) {
-            $clean_val = trim( $value ); // حذف فاصله احتمالی
+            $clean_val = trim( $value );
             if ( isset( $this->translations_map[ $clean_val ] ) ) {
                 return $this->translations_map[ $clean_val ];
             }
@@ -67,60 +132,16 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * ترجمه هوشمند واحد پول (تومان)
+     * فیکس کردن ایجکس سبد خرید (بسیار مهم)
+     * این تابع وقتی فرگمنت‌های سبد خرید ساخته می‌شوند اجرا می‌شود
      */
-    public function smart_translate_currency( $currency_symbol, $currency ) {
-        if ( ! $this->is_english_context() ) return $currency_symbol;
+    public function fix_ajax_cart_fragments( $fragments ) {
+        if ( ! $this->is_english_context() ) return $fragments;
 
-        // اگر کاربر برای نماد فعلی (مثلاً "تومان") ترجمه نوشته باشد
-        if ( isset( $this->translations_map[ $currency_symbol ] ) ) {
-            return $this->translations_map[ $currency_symbol ];
-        }
-        
-        return $currency_symbol;
-    }
-
-    /**
-     * ترجمه هوشمند متون (Gettext)
-     */
-    public function smart_translate_gettext( $translated, $text, $domain ) {
-        if ( ! $this->is_english_context() ) return $translated;
-
-        // 1. اولویت اول: اگر کاربر دقیقاً این متن را ترجمه کرده است
-        $clean_translated = trim( $translated ); // متن نهایی (که شاید فارسی شده باشد)
-        if ( isset( $this->translations_map[ $clean_translated ] ) ) {
-            return $this->translations_map[ $clean_translated ];
-        }
-
-        // 2. اولویت دوم: شاید کاربر متن انگلیسی اصلی را ترجمه کرده باشد
-        $clean_text = trim( $text );
-        if ( isset( $this->translations_map[ $clean_text ] ) ) {
-            return $this->translations_map[ $clean_text ];
-        }
-
-        return $translated;
-    }
-
-    public function smart_translate_gettext_context( $translated, $text, $context, $domain ) {
-        return $this->smart_translate_gettext( $translated, $text, $domain );
-    }
-
-    // --- توابع کمکی قبلی ---
-
-    private function is_english_context() {
-        if ( is_admin() && ! wp_doing_ajax() ) return false;
-        if ( isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) return true;
-        if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) return true;
-        if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) return true;
-        if ( wp_doing_ajax() || isset( $_GET['wc-ajax'] ) ) {
-            if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) return true;
-        }
-        return false;
-    }
-
-    public function disable_persian_replacements( $value ) {
-        if ( $this->is_english_context() ) return [];
-        return $value;
+        // اینجا می‌توانیم اگر لازم بود چیزی را به زور تغییر دهیم
+        // اما چون هوک‌های gettext و theme_options در بالا فعال هستند،
+        // وقتی ووکامرس دارد HTML سبد را می‌سازد، خودکار ترجمه می‌شوند.
+        return $fragments;
     }
 
     public function unload_persian_translations( $mofile, $domain ) {
@@ -128,6 +149,11 @@ class Fikup_Poly_UI_Logic {
         $blocked = [ 'woodmart', 'woocommerce', 'woodmart-core', 'woocommerce-persian', 'persian-woocommerce', 'wooc-fa' ];
         if ( in_array( $domain, $blocked ) ) return ''; 
         return $mofile;
+    }
+
+    public function disable_persian_replacements( $value ) {
+        if ( $this->is_english_context() ) return [];
+        return $value;
     }
 
     public function swap_header_builder_id( $id ) {
@@ -148,21 +174,24 @@ class Fikup_Poly_UI_Logic {
         ?>
         <script>
         (function() {
-            function setFikupCookie(name, value, days) {
-                var d = new Date(); d.setTime(d.getTime() + (days*24*60*60*1000));
-                document.cookie = name + "=" + (value || "")  + "; expires=" + d.toUTCString() + "; path=/";
+            // اسکریپت مدیریت کوکی برای جلوگیری از باگ کش
+            function setFikupCookie(name, value) {
+                document.cookie = name + "=" + (value || "")  + "; path=/";
             }
-            if ( window.location.pathname.indexOf('/en/') !== -1 ) {
-                setFikupCookie('fikup_lang', 'en', 30);
+            
+            var isEn = window.location.pathname.indexOf('/en/') !== -1;
+            
+            if ( isEn ) {
+                setFikupCookie('fikup_lang', 'en');
+                // اضافه کردن هدر به تمام درخواست‌های ایجکس بعدی
                 if ( typeof jQuery !== 'undefined' ) {
                     jQuery( document ).ajaxSend(function(event, xhr, settings) {
                         xhr.setRequestHeader('X-Fikup-Lang', 'en');
                     });
                 }
             } else {
-                if ( document.cookie.indexOf('fikup_lang=en') !== -1 ) {
-                    setFikupCookie('fikup_lang', 'fa', 30);
-                }
+                // اگر در صفحه فارسی هستیم، حتما کوکی را پاک کن یا فارسی کن
+                setFikupCookie('fikup_lang', 'fa');
             }
         })();
         </script>
