@@ -23,7 +23,7 @@ class Fikup_Poly_Language {
     }
 
     /**
-     * تابع جدید و اصلاح شده برای تولید لینک نسخه مخالف
+     * تابع تولید لینک نسخه مخالف (اصلاح شده برای نادیده گرفتن زباله‌ها)
      */
     public static function get_translated_url() {
         $is_currently_en = self::is_english();
@@ -36,36 +36,34 @@ class Fikup_Poly_Language {
             
             if ( $group_id ) {
                 global $wpdb;
+                // کوئری اصلاح شده: اتصال به جدول posts برای چک کردن وضعیت publish
                 $target_id = $wpdb->get_var( $wpdb->prepare(
-                    "SELECT post_id FROM $wpdb->postmeta 
-                     WHERE meta_key = '_fikup_translation_group' AND meta_value = %s 
-                     AND post_id != %d LIMIT 1",
+                    "SELECT m.post_id 
+                     FROM $wpdb->postmeta m
+                     INNER JOIN $wpdb->posts p ON m.post_id = p.ID
+                     WHERE m.meta_key = '_fikup_translation_group' 
+                     AND m.meta_value = %s 
+                     AND m.post_id != %d 
+                     AND p.post_status = 'publish' 
+                     LIMIT 1",
                     $group_id, $current_id
                 ));
 
                 if ( $target_id ) {
-                    // دریافت لینک اولیه
                     $url = get_permalink( $target_id );
                     
-                    // --- فیکس جدید: تبدیل لینک زشت به لینک تمیز ---
-                    // اگر لینک دارای page_id یا ?p= بود، یعنی وردپرس نتوانسته اسلاگ را بیاورد
+                    // فیکس لینک‌های زشت (?page_id=)
                     if ( strpos( $url, 'page_id=' ) !== false || strpos( $url, '?p=' ) !== false ) {
-                        // دریافت آدرس تمیز (شامل پرنت‌ها) مثلا: about-us یا services/design
                         $slug_path = get_page_uri( $target_id );
-                        
                         if ( $slug_path ) {
                             $home = rtrim( get_option( 'home' ), '/' );
-                            
                             if ( $target_lang === 'en' ) {
-                                // ساخت دستی لینک انگلیسی
                                 $url = $home . '/en/' . $slug_path . '/';
                             } else {
-                                // ساخت دستی لینک فارسی
                                 $url = $home . '/' . $slug_path . '/';
                             }
                         }
                     }
-                    
                     return $url;
                 }
             }
@@ -128,8 +126,16 @@ class Fikup_Poly_Language {
 
             if ( $target_slug ) {
                 global $wpdb;
+                // اصلاح کوئری: فقط پست‌های منتشر شده را پیدا کن
                 $direct_en_post = $wpdb->get_var( $wpdb->prepare(
-                    "SELECT ID FROM $wpdb->posts INNER JOIN $wpdb->postmeta ON ($wpdb->posts.ID = $wpdb->postmeta.post_id) WHERE post_name = %s AND post_type = %s AND meta_key = '_fikup_lang' AND meta_value = 'en' LIMIT 1", $target_slug, $post_type
+                    "SELECT ID FROM $wpdb->posts 
+                     INNER JOIN $wpdb->postmeta ON ($wpdb->posts.ID = $wpdb->postmeta.post_id) 
+                     WHERE post_name = %s 
+                     AND post_type = %s 
+                     AND post_status = 'publish'
+                     AND meta_key = '_fikup_lang' AND meta_value = 'en' 
+                     LIMIT 1", 
+                    $target_slug, $post_type
                 ));
 
                 if ( $direct_en_post ) {
@@ -139,7 +145,19 @@ class Fikup_Poly_Language {
                     if ( $original_post ) {
                         $group_id = get_post_meta( $original_post->ID, '_fikup_translation_group', true );
                         if ( $group_id ) {
-                            $en_id = $wpdb->get_var( $wpdb->prepare( "SELECT post_id FROM $wpdb->postmeta WHERE meta_key = '_fikup_translation_group' AND meta_value = %s AND post_id != %d LIMIT 1", $group_id, $original_post->ID ));
+                            // اصلاح کوئری: فقط پست‌های منتشر شده در گروه را پیدا کن
+                            $en_id = $wpdb->get_var( $wpdb->prepare( 
+                                "SELECT m.post_id 
+                                 FROM $wpdb->postmeta m
+                                 INNER JOIN $wpdb->posts p ON m.post_id = p.ID
+                                 WHERE m.meta_key = '_fikup_translation_group' 
+                                 AND m.meta_value = %s 
+                                 AND m.post_id != %d 
+                                 AND p.post_status = 'publish'
+                                 LIMIT 1", 
+                                $group_id, $original_post->ID 
+                            ));
+                            
                             if ( $en_id ) {
                                 if( $post_type == 'page' ) $vars['page_id'] = $en_id; else $vars['p'] = $en_id;
                                 unset( $vars['pagename'] ); unset( $vars['name'] );
@@ -157,20 +175,16 @@ class Fikup_Poly_Language {
         return $redirect_url;
     }
 
-    // --- اصلاحات لینک‌دهی ---
-
     public function filter_permalink( $url, $post ) {
         $post = get_post( $post );
         if ( ! $post ) return $url;
         
         $lang = get_post_meta( $post->ID, '_fikup_lang', true );
         
-        // ۱. پست انگلیسی است -> باید /en داشته باشد
         if ( $lang === 'en' ) {
             return $this->inject_en_prefix( $url );
         }
         
-        // ۲. پست فارسی است اما در محیط انگلیسی هستیم -> باید /en حذف شود
         if ( $lang !== 'en' ) {
             return $this->strip_en_prefix( $url );
         }
@@ -193,19 +207,15 @@ class Fikup_Poly_Language {
         return $url;
     }
 
-    // اضافه کردن /en
     private function inject_en_prefix( $url ) {
         $home = rtrim( get_option( 'home' ), '/' );
         if ( strpos( $url, '/en/' ) !== false ) return $url;
         return str_replace( $home, $home . '/en', $url );
     }
 
-    // حذف /en (برای بازگشت به فارسی)
     private function strip_en_prefix( $url ) {
         $home = rtrim( get_option( 'home' ), '/' );
         $home_en = $home . '/en';
-        
-        // اگر آدرس با دامنه/en شروع می‌شود، آن را با دامنه خالی جایگزین کن
         if ( strpos( $url, $home_en ) === 0 ) {
             return str_replace( $home_en, $home, $url );
         }
