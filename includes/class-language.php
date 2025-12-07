@@ -32,13 +32,13 @@ class Fikup_Poly_Language {
     }
 
     /**
-     * هسته اصلی تولید لینک ترجمه (با خواندن تنظیمات کاربر)
+     * هسته اصلی تولید لینک ترجمه (اصلاح شده برای صفحات مجازی مثل Wishlist)
      */
     public static function get_translated_url() {
         $is_currently_en = self::is_english();
         $target_lang = $is_currently_en ? 'fa' : 'en';
         
-        // --- خواندن نقشه اسلاگ‌ها از تنظیمات ---
+        // --- ۱. خواندن نقشه اسلاگ‌ها از تنظیمات ---
         $slug_map = [];
         $raw_map = get_option( 'fikup_slug_mapping', '' );
         if ( ! empty( $raw_map ) ) {
@@ -46,8 +46,8 @@ class Fikup_Poly_Language {
             foreach ( $lines as $line ) {
                 $parts = explode( ':', $line );
                 if ( count( $parts ) >= 2 ) {
-                    $en_key = trim( $parts[0] );
-                    $fa_val = trim( $parts[1] );
+                    $en_key = trim( $parts[0] ); // wishlist
+                    $fa_val = trim( $parts[1] ); // علاقه-مندی-ها
                     if ( ! empty( $en_key ) && ! empty( $fa_val ) ) {
                         $slug_map[ $en_key ] = $fa_val;
                     }
@@ -55,15 +55,51 @@ class Fikup_Poly_Language {
             }
         }
         
-        // همیشه این‌ها را هم به عنوان پیش‌فرض داشته باشیم (مگر اینکه کاربر اورراید کند)
+        // پیش‌فرض‌های ضروری (اگر کاربر وارد نکرده باشد)
         if ( ! isset( $slug_map['cart'] ) ) $slug_map['cart'] = 'cart';
         if ( ! isset( $slug_map['checkout'] ) ) $slug_map['checkout'] = 'checkout';
 
-        // ۱. بررسی صفحه فعلی
+        // --- ۲. تشخیص Slug فعلی از روی URL (برای صفحاتی که ID ندارند) ---
+        $current_url_slug = '';
+        if ( isset( $_SERVER['REQUEST_URI'] ) ) {
+            $path = parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH );
+            // تمیز کردن path (حذف اسلش‌های اضافی و en)
+            $path = trim( $path, '/' );
+            if ( strpos( $path, 'en/' ) === 0 ) {
+                $path = substr( $path, 3 ); // حذف en/ اول
+            } elseif ( $path === 'en' ) {
+                $path = '';
+            }
+            // گرفتن آخرین بخش آدرس
+            $parts = explode( '/', $path );
+            $current_url_slug = end( $parts );
+            $current_url_slug = urldecode( $current_url_slug ); // برای فارسی
+        }
+
+        // --- ۳. اولویت اول: بررسی نقشه دستی با Slug پیدا شده ---
+        if ( ! empty( $current_url_slug ) ) {
+            $home = rtrim( get_option( 'home' ), '/' );
+            
+            if ( $is_currently_en ) {
+                // حالت EN به FA: چک کن آیا این Slug انگلیسی در مپ هست؟
+                // مثال: current=wishlist -> آیا wishlist در مپ هست؟ بله -> علاقه-مندی-ها
+                if ( isset( $slug_map[ $current_url_slug ] ) ) {
+                    // ساخت لینک فارسی خالص
+                    return $home . '/' . $slug_map[ $current_url_slug ] . '/';
+                }
+            } else {
+                // حالت FA به EN: چک کن آیا این Slug فارسی در مپ هست؟
+                // مثال: current=علاقه-مندی-ها -> پیدا کردن کلید wishlist
+                $english_slug = array_search( $current_url_slug, $slug_map );
+                if ( $english_slug ) {
+                    return $home . '/en/' . $english_slug . '/';
+                }
+            }
+        }
+
+        // --- ۴. اولویت دوم: بررسی دیتابیس (برای صفحات عادی وردپرس) ---
         if ( is_singular() ) {
             $current_id = get_the_ID();
-            
-            // الف) تلاش برای پیدا کردن از طریق اتصال دیتابیس (Metabox)
             $group_id = get_post_meta( $current_id, '_fikup_translation_group', true );
             if ( $group_id ) {
                 global $wpdb;
@@ -81,33 +117,24 @@ class Fikup_Poly_Language {
                     return self::finalize_url( get_permalink( $target_id ), $target_lang );
                 }
             }
-            
-            // ب) اگر اتصال نبود، چک کردن نقشه دستی کاربر
-            $post = get_post( $current_id );
-            $current_slug = urldecode( $post->post_name ); 
+        }
 
-            if ( $is_currently_en ) {
-                // تبدیل انگلیسی به فارسی
-                if ( isset( $slug_map[ $current_slug ] ) ) {
-                    $home = rtrim( get_option( 'home' ), '/' );
-                    // ساخت لینک فارسی
-                    return $home . '/' . $slug_map[ $current_slug ] . '/'; 
-                }
+        // --- ۵. فال‌بک نهایی: تغییر زبان همان آدرس فعلی ---
+        global $wp;
+        $current_full_url = home_url( add_query_arg( array(), $wp->request ) );
+        
+        // اگر در Wishlist بودیم و مپ پیدا نشد ولی نامک‌ها یکی هستند:
+        if ( ! empty( $current_url_slug ) ) {
+            // ساخت دستی لینک برای اطمینان
+            $home = rtrim( get_option( 'home' ), '/' );
+            if ( $target_lang === 'en' ) {
+                return $home . '/en/' . $current_url_slug . '/';
             } else {
-                // تبدیل فارسی به انگلیسی
-                $english_slug = array_search( $current_slug, $slug_map );
-                
-                if ( $english_slug ) {
-                    $home = rtrim( get_option( 'home' ), '/' );
-                    return $home . '/en/' . $english_slug . '/';
-                }
+                return $home . '/' . $current_url_slug . '/';
             }
         }
 
-        // ۲. فال‌بک
-        global $wp;
-        $current_url = home_url( add_query_arg( array(), $wp->request ) );
-        return self::finalize_url( $current_url, $target_lang );
+        return self::finalize_url( $current_full_url, $target_lang );
     }
 
     private static function finalize_url( $url, $target_lang ) {
@@ -128,7 +155,7 @@ class Fikup_Poly_Language {
         return str_replace( '/en/', '/', $url );
     }
 
-    // --- سایر متدها ---
+    // --- توابع ضروری دیگر ---
     public function set_locale( $locale ) {
         $is_en = false;
         if ( isset( $_SERVER['REQUEST_URI'] ) ) {
