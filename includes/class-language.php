@@ -17,7 +17,7 @@ class Fikup_Poly_Language {
         add_filter( 'term_link', [ $this, 'filter_term_link' ], 10, 2 );
         add_filter( 'home_url', [ $this, 'filter_home_url' ], 10, 2 );
         
-        // --- فیلترهای اختصاصی ووکامرس و وودمارت (جدید) ---
+        // فیلترهای اختصاصی ووکامرس/وودمارت
         add_filter( 'woocommerce_get_cart_url', [ $this, 'force_en_url' ] );
         add_filter( 'woocommerce_get_checkout_url', [ $this, 'force_en_url' ] );
         add_filter( 'woocommerce_get_shop_url', [ $this, 'force_en_url' ] );
@@ -30,19 +30,24 @@ class Fikup_Poly_Language {
     }
 
     /**
-     * تابع جدید: مجبور کردن لینک‌های خاص به انگلیسی
+     * مجبور کردن لینک‌های خاص به انگلیسی (فقط وقتی در محیط انگلیسی هستیم)
      */
     public function force_en_url( $url ) {
         if ( self::is_english() ) {
-            return $this->inject_en_prefix( $url );
+            return self::inject_en_prefix( $url );
         }
         return $url;
     }
 
+    /**
+     * تولید لینک هوشمند برای سوئیچر زبان
+     */
     public static function get_translated_url() {
         $is_currently_en = self::is_english();
         $target_lang = $is_currently_en ? 'fa' : 'en';
+        $final_url = '';
 
+        // ۱. تلاش برای پیدا کردن صفحه معادل
         if ( is_singular() ) {
             $current_id = get_the_ID();
             $group_id = get_post_meta( $current_id, '_fikup_translation_group', true );
@@ -50,12 +55,20 @@ class Fikup_Poly_Language {
             if ( $group_id ) {
                 global $wpdb;
                 $target_id = $wpdb->get_var( $wpdb->prepare(
-                    "SELECT m.post_id FROM $wpdb->postmeta m INNER JOIN $wpdb->posts p ON m.post_id = p.ID WHERE m.meta_key = '_fikup_translation_group' AND m.meta_value = %s AND m.post_id != %d AND p.post_status = 'publish' LIMIT 1",
+                    "SELECT m.post_id FROM $wpdb->postmeta m 
+                     INNER JOIN $wpdb->posts p ON m.post_id = p.ID 
+                     WHERE m.meta_key = '_fikup_translation_group' 
+                     AND m.meta_value = %s 
+                     AND m.post_id != %d 
+                     AND p.post_status = 'publish' 
+                     LIMIT 1",
                     $group_id, $current_id
                 ));
 
                 if ( $target_id ) {
                     $url = get_permalink( $target_id );
+                    
+                    // اگر لینک زشت بود (page_id)، دستی بساز
                     if ( strpos( $url, 'page_id=' ) !== false || strpos( $url, '?p=' ) !== false ) {
                         $slug_path = get_page_uri( $target_id );
                         if ( $slug_path ) {
@@ -63,14 +76,48 @@ class Fikup_Poly_Language {
                             $url = ( $target_lang === 'en' ) ? $home . '/en/' . $slug_path . '/' : $home . '/' . $slug_path . '/';
                         }
                     }
-                    return $url;
+                    $final_url = $url;
                 }
             }
         }
 
-        $home = rtrim( get_option( 'home' ), '/' );
-        return ( $target_lang === 'en' ) ? $home . '/en/' : $home . '/';
+        // ۲. اگر لینک پیدا نشد، برو به صفحه اصلی زبان مقصد
+        if ( empty( $final_url ) ) {
+            $home = rtrim( get_option( 'home' ), '/' );
+            $final_url = ( $target_lang === 'en' ) ? $home . '/en/' : $home . '/';
+        }
+
+        // ۳. پاکسازی نهایی و حیاتی (Fixing the Sticky URL bug)
+        // اینجا مطمئن می‌شویم که اگر مقصد فارسی است، حتماً /en/ حذف شود
+        // و اگر مقصد انگلیسی است، حتماً /en/ داشته باشد.
+        if ( $target_lang === 'fa' ) {
+            return self::strip_en_prefix( $final_url );
+        } else {
+            return self::inject_en_prefix( $final_url );
+        }
     }
+
+    // --- توابع کمکی (استاتیک شده برای دسترسی سراسری) ---
+
+    private static function inject_en_prefix( $url ) {
+        $home = rtrim( get_option( 'home' ), '/' );
+        // اگر قبلاً en دارد، دست نزن
+        if ( strpos( $url, '/en/' ) !== false ) return $url;
+        // اضافه کردن en بعد از دامنه
+        return str_replace( $home, $home . '/en', $url );
+    }
+
+    private static function strip_en_prefix( $url ) {
+        $home = rtrim( get_option( 'home' ), '/' );
+        $home_en = $home . '/en';
+        // اگر با دامنه/en شروع می‌شود، en را حذف کن
+        if ( strpos( $url, $home_en ) === 0 ) {
+            return str_replace( $home_en, $home, $url );
+        }
+        return $url;
+    }
+
+    // --- سایر توابع کلاس ---
 
     public function set_locale( $locale ) {
         $is_en = false;
@@ -158,14 +205,14 @@ class Fikup_Poly_Language {
         if ( ! $post ) return $url;
         $lang = get_post_meta( $post->ID, '_fikup_lang', true );
         
-        if ( $lang === 'en' ) return $this->inject_en_prefix( $url );
-        if ( $lang !== 'en' ) return $this->strip_en_prefix( $url );
+        if ( $lang === 'en' ) return self::inject_en_prefix( $url );
+        if ( $lang !== 'en' ) return self::strip_en_prefix( $url );
         
         return $url;
     }
 
     public function filter_term_link( $url, $term ) {
-        if ( self::$current_lang === 'en' ) return $this->inject_en_prefix( $url );
+        if ( self::$current_lang === 'en' ) return self::inject_en_prefix( $url );
         return $url;
     }
 
@@ -176,19 +223,6 @@ class Fikup_Poly_Language {
             if ( $url === $home_root || $url === $home_root . '/' ) return $home_root . '/en/';
             return str_replace( $home_root, $home_root . '/en', $url );
         }
-        return $url;
-    }
-
-    private function inject_en_prefix( $url ) {
-        $home = rtrim( get_option( 'home' ), '/' );
-        if ( strpos( $url, '/en/' ) !== false ) return $url;
-        return str_replace( $home, $home . '/en', $url );
-    }
-
-    private function strip_en_prefix( $url ) {
-        $home = rtrim( get_option( 'home' ), '/' );
-        $home_en = $home . '/en';
-        if ( strpos( $url, $home_en ) === 0 ) return str_replace( $home_en, $home, $url );
         return $url;
     }
 
