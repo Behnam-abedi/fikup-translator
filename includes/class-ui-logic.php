@@ -8,7 +8,7 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
-        // ۱. پروتکل سکوت (جلوگیری از چاپ خطاهای قالب در پاسخ ایجکس)
+        // ۱. پروتکل سکوت برای ایجکس
         if ( wp_doing_ajax() ) {
             @error_reporting(0);
             @ini_set('display_errors', 0);
@@ -16,7 +16,6 @@ class Fikup_Poly_UI_Logic {
             add_action( 'shutdown', function() {
                 if ( ob_get_length() ) {
                     $out = ob_get_contents();
-                    // اگر خروجی جیسون نبود، پاکش کن تا ایجکس سالم بماند
                     if ( strpos( trim($out), '{' ) !== 0 && strpos( trim($out), '[' ) !== 0 ) {
                         ob_clean();
                     }
@@ -24,7 +23,6 @@ class Fikup_Poly_UI_Logic {
             }, 0 );
         }
 
-        // لود ترجمه‌های دستی
         $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
             foreach($saved_strings as $item) {
@@ -34,51 +32,40 @@ class Fikup_Poly_UI_Logic {
         $this->en_header_id = get_option( 'fikup_woodmart_header_id' );
         $this->en_footer_id = get_option( 'fikup_woodmart_footer_id' );
 
-        // --- هوک‌های ترجمه و قالب ---
         add_filter( 'gettext', [ $this, 'universal_translator' ], 9999, 3 );
         add_filter( 'gettext_with_context', [ $this, 'universal_translator_context' ], 9999, 4 );
         add_filter( 'woodmart_option', [ $this, 'translate_theme_options' ], 999, 2 );
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
-        
-        // جلوگیری از لود فایل‌های زبان فارسی
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
-
-        // --- مدیریت ایجکس و کش ---
         add_filter( 'woocommerce_cart_hash', [ $this, 'split_cart_hash' ] );
-        
-        // تغییر آدرس ایجکس در فرانت‌اند (مهم‌ترین بخش)
         add_action( 'wp_enqueue_scripts', [ $this, 'force_english_ajax_url' ], 20 );
     }
 
     /**
-     * تشخیص زبان: این تابع دیکتاتور است. اگر کوچکترین نشانه‌ای از انگلیسی ببیند، true می‌دهد.
+     * تشخیص زبان (اصلاح شده)
      */
     private function is_english() {
-        // ۱. اگر پارامتر زبان در URL هست (مثلاً ?lang=en)
+        // ۱. پارامتر مستقیم در URL
         if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) return true;
 
-        // ۲. اگر خود آدرس دارای /en/ است
+        // ۲. ساختار آدرس (مهم‌ترین شرط)
         if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) return true;
 
-        // ۳. اگر رفرر (صفحه قبلی) انگلیسی بوده (برای ایجکس‌هایی که پارامتر ندارند)
-        $referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '';
-        if ( strpos( $referer, '/en/' ) !== false ) return true;
+        // ۳. بررسی رفرر (فقط و فقط برای درخواست‌های AJAX)
+        // تغییر مهم: این شرط باعث باگ شما شده بود چون در لود معمولی هم چک می‌شد
+        if ( wp_doing_ajax() ) {
+            $referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '';
+            if ( strpos( $referer, '/en/' ) !== false ) return true;
+        }
 
         return false;
     }
 
-    /**
-     * جداسازی کش سرور بر اساس زبان
-     */
     public function split_cart_hash( $hash ) {
         return $hash . '-' . ( $this->is_english() ? 'en' : 'fa' );
     }
 
-    /**
-     * تغییر آدرس AJAX ووکامرس در سمت کاربر
-     * این تابع باعث می‌شود وقتی در صفحه انگلیسی هستید، درخواست‌های ایجکس به آدرس انگلیسی بروند.
-     */
     public function force_english_ajax_url() {
         if ( ! $this->is_english() ) return;
 
@@ -86,39 +73,27 @@ class Fikup_Poly_UI_Logic {
             if ( typeof wc_cart_fragments_params === 'undefined' ) {
                 var wc_cart_fragments_params = {};
             }
-            // ۱. جدا کردن سطل ذخیره‌سازی در مرورگر (جلوگیری از تداخل با کش فارسی)
             wc_cart_fragments_params.fragment_name = 'wc_fragments_en_';
             
-            // ۲. تغییر آدرس ایجکس (این خط قبلاً کامنت بود و باعث مشکل می‌شد)
-            // حالا درخواست‌ها به شکل /en/?wc-ajax=... ارسال می‌شوند
             if ( typeof wc_cart_fragments_params.wc_ajax_url !== 'undefined' ) {
                 var base = wc_cart_fragments_params.wc_ajax_url;
-                // اگر آدرس قبلاً انگلیسی نشده، اصلاحش کن
                 if ( base.indexOf('/en/') === -1 && base.indexOf('lang=en') === -1 ) {
-                     // اضافه کردن پارامتر lang=en برای محکم‌کاری
                      var separator = base.indexOf('?') !== -1 ? '&' : '?';
                      wc_cart_fragments_params.wc_ajax_url = base + separator + 'lang=en';
                 }
             }
         ";
         wp_add_inline_script( 'wc-cart-fragments', $script, 'before' );
-        
-        // استایل‌های انگلیسی
         echo '<style>body.fikup-en-mode { font-family: "Roboto", sans-serif !important; direction: ltr !important; }</style>';
     }
 
-    // --- توابع ترجمه و حذف فارسی ---
+    // --- توابع ترجمه ---
 
     public function unload_persian_translations( $mofile, $domain ) {
         if ( ! $this->is_english() ) return $mofile;
-        
-        // لیست دامنه‌هایی که نباید ترجمه فارسی‌شان لود شود
         $blocked = [ 'woodmart', 'woocommerce', 'woodmart-core', 'woocommerce-persian', 'persian-woocommerce', 'wooc-fa' ];
         if ( in_array( $domain, $blocked ) ) return ''; 
-        
-        // اگر فایل ترجمه حاوی fa_IR بود، بلاک کن
         if ( strpos( $mofile, 'fa_IR' ) !== false ) return '';
-
         return $mofile;
     }
 
@@ -137,7 +112,6 @@ class Fikup_Poly_UI_Logic {
         if ( $slug === 'footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
         if ( is_string( $value ) && isset( $this->translations_map[ trim($value) ] ) ) return $this->translations_map[ trim($value) ];
         
-        // مقادیر فارسی تنظیمات قالب را خالی می‌کنیم تا انگلیسی پیش‌فرض قالب برگردد
         $defaults = [ 'empty_cart_text', 'mini_cart_view_cart_text', 'mini_cart_checkout_text', 'btn_view_cart_text', 'btn_checkout_text', 'copyrights' ];
         if ( in_array( $slug, $defaults ) ) return '';
         
