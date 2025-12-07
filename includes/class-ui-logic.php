@@ -8,6 +8,11 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
+        // ۱. غیرفعال کردن نمایش خطاها (حیاتی برای سالم ماندن ایجکس)
+        if ( wp_doing_ajax() ) {
+            @ini_set( 'display_errors', 0 );
+        }
+
         // لود تنظیمات ترجمه
         $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
@@ -27,16 +32,16 @@ class Fikup_Poly_UI_Logic {
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
 
-        // --- بخش حیاتی: پروتکل اتمی ---
-        // ۱. تغییر امضای سبد خرید در سرور
+        // --- شاهکار جداسازی (Isolation Logic) ---
+        // ۱. جداسازی هش در سمت سرور
         add_filter( 'woocommerce_cart_hash', [ $this, 'server_side_hash_split' ] );
 
-        // ۲. اسکریپت پاکسازی اتمی در مرورگر
-        add_action( 'wp_head', [ $this, 'nuclear_cache_reset' ], 0 );
+        // ۲. جداسازی سطل‌های ذخیره‌سازی در سمت کلاینت (مرورگر)
+        add_action( 'wp_enqueue_scripts', [ $this, 'isolate_client_fragments' ], 20 );
     }
 
     /**
-     * تشخیص زبان (سمت سرور)
+     * تشخیص زبان
      */
     private function is_english() {
         if ( ! wp_doing_ajax() ) {
@@ -47,12 +52,34 @@ class Fikup_Poly_UI_Logic {
     }
 
     /**
-     * تغییر هش سبد خرید در دیتابیس
-     * این باعث می‌شود سرور دیتای متفاوت برای زبان‌های مختلف تولید کند
+     * جداسازی سرور: هر زبان، هش مخصوص خودش را دارد.
      */
     public function server_side_hash_split( $hash ) {
         $lang = $this->is_english() ? 'en' : 'fa';
         return $hash . '-' . $lang;
+    }
+
+    /**
+     * جداسازی کلاینت: تغییر نام کلیدهای ذخیره‌سازی ووکامرس
+     * این باعث می‌شود تداخل کش بین دو زبان غیرممکن شود.
+     */
+    public function isolate_client_fragments() {
+        $lang = $this->is_english() ? 'en' : 'fa';
+        
+        // این اسکریپت دقیقاً قبل از فایل اصلی ووکامرس اجرا می‌شود
+        // و تنظیمات آن را تغییر می‌دهد تا در "سطل" دیگری ذخیره کند.
+        $script = "
+            if ( typeof wc_cart_fragments_params === 'undefined' ) {
+                var wc_cart_fragments_params = {};
+            }
+            // تغییر نام کلید ذخیره‌سازی (مثلاً: wc_fragments_fa_...)
+            wc_cart_fragments_params.fragment_name = 'wc_fragments_" . $lang . "_';
+            
+            // اجبار به استفاده از آدرس ایجکس زبان‌دار
+            // wc_cart_fragments_params.wc_ajax_url = '" . esc_js( add_query_arg( 'lang', $lang, WC()->ajax_url() ) ) . "';
+        ";
+        
+        wp_add_inline_script( 'wc-cart-fragments', $script, 'before' );
     }
 
     // --- توابع ترجمه و قالب ---
@@ -85,70 +112,5 @@ class Fikup_Poly_UI_Logic {
         if ( $meta_key === '_woodmart_footer_content_type' ) return 'html_block';
         if ( $meta_key === '_woodmart_footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
         return $value;
-    }
-
-    /**
-     * پروتکل پاکسازی اتمی (The Nuclear Reset)
-     * این اسکریپت با خشونت تمام کش‌ها را پاک می‌کند اگر زبان تغییر کرده باشد.
-     */
-    public function nuclear_cache_reset() {
-        ?>
-        <script>
-        (function() {
-            // ۱. زبان فعلی صفحه چیست؟
-            var isEn = window.location.pathname.indexOf('/en/') !== -1;
-            var currentLang = isEn ? 'en' : 'fa';
-            
-            // کلید ذخیره وضعیت در مرورگر
-            var storageKey = 'fikup_lang_tracker';
-
-            try {
-                // ۲. زبان قبلی چه بوده؟
-                var lastLang = localStorage.getItem(storageKey);
-
-                // ۳. اگر زبان تغییر کرده (یا بار اول است)
-                if ( lastLang !== currentLang ) {
-                    console.log('Fikup: Language Mismatch (' + lastLang + ' -> ' + currentLang + '). Executing Nuclear Reset.');
-
-                    // الف) پاکسازی کش HTML ووکامرس
-                    sessionStorage.removeItem('wc_fragments_hash');
-                    sessionStorage.removeItem('wc_fragments');
-                    sessionStorage.removeItem('wc_cart_hash_data');
-                    sessionStorage.removeItem('wc_cart_created');
-
-                    // ب) حذف کوکی هش سبد خرید (مهم‌ترین بخش!)
-                    // این کار باعث می‌شود ووکامرس بفهمد کش نامعتبر است
-                    document.cookie = "woocommerce_cart_hash=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-                    document.cookie = "woocommerce_items_in_cart=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-
-                    // ج) بروزرسانی وضعیت زبان
-                    localStorage.setItem(storageKey, currentLang);
-
-                    // د) دستور رفرش به ووکامرس (با کمی تاخیر برای اطمینان)
-                    window.addEventListener('load', function() {
-                        setTimeout(function(){
-                            if ( typeof jQuery !== 'undefined' ) {
-                                jQuery( document.body ).trigger( 'wc_fragment_refresh' );
-                                jQuery( document.body ).trigger( 'removed_from_cart' );
-                                console.log('Fikup: Refresh Triggered.');
-                            }
-                        }, 500); // نیم ثانیه صبر برای لود کامل اسکریپت‌های قالب
-                    });
-                }
-            } catch(e) {
-                console.error('Fikup Reset Error:', e);
-            }
-
-            // استایل‌های انگلیسی
-            if ( isEn ) {
-                var css = 'body.fikup-en-mode, .fikup-en-mode { font-family: "Roboto", sans-serif !important; }';
-                var s = document.createElement('style');
-                s.innerHTML = css;
-                document.head.appendChild(s);
-                document.body.classList.add('fikup-en-mode');
-            }
-        })();
-        </script>
-        <?php
     }
 }
