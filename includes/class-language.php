@@ -22,37 +22,33 @@ class Fikup_Poly_Language {
     public function set_locale( $locale ) {
         $is_en = false;
 
-        // تشخیص از روی URL
+        // 1. تشخیص از روی URL (برای لود معمولی صفحات)
         if ( isset( $_SERVER['REQUEST_URI'] ) ) {
             $path = parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH );
             if ( strpos( $path, '/en/' ) === 0 || $path === '/en' ) {
                 $is_en = true;
             }
         }
-        // تشخیص از روی پارامتر
+
+        // 2. تشخیص از روی پارامتر (کمکی)
         if ( isset( $_GET['lang'] ) && $_GET['lang'] === 'en' ) {
             $is_en = true;
         }
 
-        if ( $is_en ) {
-            self::$current_lang = 'en';
-            
-            // ست کردن کوکی برای استفاده در درخواست‌های بعدی و آژاکس
-            // تغییر: اضافه شدن شرط ! wp_doing_ajax() برای جلوگیری از اختلال در درخواست‌های ایجکس
-            if ( ! is_admin() && ! wp_doing_ajax() && ( ! isset( $_COOKIE['fikup_lang'] ) || $_COOKIE['fikup_lang'] !== 'en' ) ) {
-                setcookie( 'fikup_lang', 'en', time() + 3600 * 24 * 30, '/' );
-                $_COOKIE['fikup_lang'] = 'en';
-            }
-            return 'en_US';
-        } else {
-            // اگر انگلیسی نیست، کوکی را به فارسی برگردان
-            // تغییر: اضافه شدن شرط ! wp_doing_ajax()
-            if ( ! is_admin() && ! wp_doing_ajax() && isset( $_COOKIE['fikup_lang'] ) && $_COOKIE['fikup_lang'] === 'en' ) {
-                setcookie( 'fikup_lang', 'fa', time() + 3600 * 24 * 30, '/' );
-                $_COOKIE['fikup_lang'] = 'fa';
+        // 3. تشخیص هوشمند برای AJAX (بدون کوکی)
+        // فرانت‌اند موظف است این هدر را ارسال کند
+        if ( wp_doing_ajax() ) {
+            if ( isset( $_SERVER['HTTP_X_FIKUP_LANG'] ) && $_SERVER['HTTP_X_FIKUP_LANG'] === 'en' ) {
+                $is_en = true;
             }
         }
 
+        if ( $is_en ) {
+            self::$current_lang = 'en';
+            return 'en_US';
+        }
+
+        // اگر انگلیسی نبود، پیش‌فرض همان فارسی است (بدون نیاز به ست کردن کوکی فارسی)
         return $locale;
     }
 
@@ -66,6 +62,7 @@ class Fikup_Poly_Language {
         return $classes;
     }
 
+    // --- بقیه توابع بدون تغییر باقی می‌مانند ---
     public function register_query_vars( $vars ) {
         $vars[] = 'lang';
         return $vars;

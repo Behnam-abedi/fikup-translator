@@ -8,7 +8,7 @@ class Fikup_Poly_UI_Logic {
     private $en_footer_id;
 
     public function __construct() {
-        // 1. آماده‌سازی لیست ترجمه (دقیقاً مثل ووکامرس فارسی)
+        // آماده‌سازی لیست ترجمه
         $saved_strings = get_option( 'fikup_translations_list', [] );
         if( is_array($saved_strings) ) {
             foreach($saved_strings as $item) {
@@ -24,54 +24,40 @@ class Fikup_Poly_UI_Logic {
 
         // --- هوک‌های اصلی ---
         
-        // ترجمه متن‌ها (با اولویت بالا)
         add_filter( 'gettext', [ $this, 'universal_translator' ], 9999, 3 );
         add_filter( 'gettext_with_context', [ $this, 'universal_translator_context' ], 9999, 4 );
         add_filter( 'ngettext', [ $this, 'universal_translator_plural' ], 9999, 5 );
 
-        // ترجمه تنظیمات قالب
         add_filter( 'woodmart_option', [ $this, 'translate_theme_options' ], 999, 2 );
 
-        // تغییر هدر/فوتر
         add_filter( 'woodmart_get_current_header_id', [ $this, 'swap_header_builder_id' ], 999 );
         add_filter( 'get_post_metadata', [ $this, 'force_layout_via_meta' ], 10, 4 );
 
-        // غیرفعال کردن ترجمه فارسی در حالت انگلیسی
         add_filter( 'load_textdomain_mofile', [ $this, 'unload_persian_translations' ], 999, 2 );
         add_filter( 'option_persian_woocommerce_replacements', [ $this, 'disable_persian_replacements' ] );
 
-        // استایل‌ها و تنظیم کوکی (فقط برای درخواست‌های بعدی ایجکس)
-        add_action( 'wp_head', [ $this, 'print_custom_css_and_js' ] );
+        // اسکریپت حیاتی برای تشخیص زبان در ایجکس
+        add_action( 'wp_head', [ $this, 'print_custom_css_and_js' ], 1 );
     }
 
     /**
-     * منطق تشخیص زبان "بدون خطا"
+     * منطق تشخیص زبان "فوق‌العاده دقیق" (بدون کوکی)
      */
     private function is_english_context() {
-        // 1. محیط ادمین همیشه فارسی
-        if ( is_admin() && ! wp_doing_ajax() ) return false;
+        // 1. اگر کلاس زبان قبلاً تشخیص داده که انگلیسی است (از طریق هدر ایجکس یا URL)
+        if ( Fikup_Poly_Language::is_english() ) {
+            return true;
+        }
 
-        // 2. صفحات عادی (غیر ایجکس): فقط و فقط بر اساس URL
+        // 2. فال‌بک (محض اطمینان): چک کردن URL در حالت غیر ایجکس
         if ( ! wp_doing_ajax() ) {
             if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/en/' ) !== false ) {
                 return true;
             }
-            return false; // اگر /en/ ندارد، قطعاً فارسی است
         }
 
-        // 3. درخواست‌های AJAX (مثل سبد خرید): بررسی کوکی و Referer
-        if ( wp_doing_ajax() || isset( $_GET['wc-ajax'] ) ) {
-            
-            // اصلاح مهم: اولویت با کوکی است (چون دقیق‌تر از Referer است)
-            if ( isset( $_COOKIE['fikup_lang'] ) ) {
-                return $_COOKIE['fikup_lang'] === 'en';
-            }
-
-            // فال‌بک: اگر کوکی نبود، به Referer نگاه کن
-            if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '/en/' ) !== false ) {
-                return true;
-            }
-            // بررسی هدر سفارشی (کمکی)
+        // 3. فال‌بک نهایی برای ایجکس: بررسی هدر اختصاصی
+        if ( wp_doing_ajax() ) {
             if ( isset( $_SERVER['HTTP_X_FIKUP_LANG'] ) && $_SERVER['HTTP_X_FIKUP_LANG'] === 'en' ) {
                 return true;
             }
@@ -80,19 +66,14 @@ class Fikup_Poly_UI_Logic {
         return false;
     }
 
-    /**
-     * سیستم جایگزینی کلمات (مشابه ووکامرس فارسی)
-     */
     public function universal_translator( $translated, $text, $domain ) {
         if ( ! $this->is_english_context() ) return $translated;
 
-        // 1. بررسی متن ترجمه شده (فارسی)
         $clean_translated = trim( $translated );
         if ( isset( $this->translations_map[ $clean_translated ] ) ) {
             return $this->translations_map[ $clean_translated ];
         }
 
-        // 2. بررسی متن اصلی (انگلیسی کد)
         $clean_text = trim( $text );
         if ( isset( $this->translations_map[ $clean_text ] ) ) {
             return $this->translations_map[ $clean_text ];
@@ -109,17 +90,12 @@ class Fikup_Poly_UI_Logic {
         return $this->universal_translator( $translation, $single, $domain );
     }
 
-    /**
-     * ترجمه تنظیمات قالب
-     */
     public function translate_theme_options( $value, $slug ) {
         if ( ! $this->is_english_context() ) return $value;
 
-        // تغییر فوتر
         if ( $slug === 'footer_content_type' ) return 'html_block';
         if ( $slug === 'footer_html_block' && ! empty( $this->en_footer_id ) ) return $this->en_footer_id;
 
-        // ترجمه مقادیر متنی تنظیمات (مثل متن سبد خالی)
         if ( is_string( $value ) ) {
             $clean_val = trim( $value );
             if ( isset( $this->translations_map[ $clean_val ] ) ) {
@@ -127,7 +103,6 @@ class Fikup_Poly_UI_Logic {
             }
         }
 
-        // اگر کاربر ترجمه‌ای ننوشته بود، متن فارسی را خالی کن تا انگلیسی پیش‌فرض قالب لود شود
         $persian_defaults = [
             'empty_cart_text', 'mini_cart_view_cart_text', 'mini_cart_checkout_text', 
             'btn_view_cart_text', 'btn_checkout_text', 'popup_added_to_cart_message',
@@ -167,15 +142,49 @@ class Fikup_Poly_UI_Logic {
     public function print_custom_css_and_js() {
         ?>
         <script>
+        /**
+         * FIKUP LANG SYSTEM (Stateless/Cookie-less)
+         * این اسکریپت وظیفه دارد به سرور بگوید در چه زبانی هستیم.
+         * منبع تشخیص: فقط URL مرورگر
+         */
         (function() {
             var isEn = window.location.pathname.indexOf('/en/') !== -1;
-            if ( isEn ) {
-                if ( typeof jQuery !== 'undefined' ) {
-                    jQuery( document ).ajaxSend(function(event, xhr, settings) {
-                        xhr.setRequestHeader('X-Fikup-Lang', 'en');
-                    });
-                }
+            
+            // 1. jQuery AJAX (برای ووکامرس و قالب)
+            if ( typeof jQuery !== 'undefined' ) {
+                jQuery.ajaxPrefilter(function( options, originalOptions, jqXHR ) {
+                    if ( isEn ) {
+                        jqXHR.setRequestHeader('X-Fikup-Lang', 'en');
+                    }
+                });
             }
+
+            // 2. Fetch API (برای تکنولوژی‌های مدرن‌تر)
+            var originalFetch = window.fetch;
+            window.fetch = function(url, options) {
+                if ( isEn ) {
+                    options = options || {};
+                    options.headers = options.headers || {};
+                    if (options.headers instanceof Headers) {
+                        options.headers.append('X-Fikup-Lang', 'en');
+                    } else {
+                        options.headers['X-Fikup-Lang'] = 'en';
+                    }
+                }
+                return originalFetch(url, options);
+            };
+
+            // 3. XMLHttpRequest (برای پلاگین‌های خیلی قدیمی)
+            var originalOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this.addEventListener('loadstart', function() {
+                   if ( isEn ) {
+                       this.setRequestHeader('X-Fikup-Lang', 'en');
+                   }
+                });
+                originalOpen.apply(this, arguments);
+            };
+
         })();
         </script>
         <?php
