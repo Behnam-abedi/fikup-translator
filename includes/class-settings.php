@@ -10,24 +10,18 @@ class Fikup_Poly_Settings {
 
     public function add_admin_menu() {
         add_menu_page(
-            'تنظیمات چندزبانه',
-            'Fikup Poly',
-            'manage_options',
-            'fikup-poly',
-            [ $this, 'render_settings_page' ],
-            'dashicons-translation',
-            80
+            'تنظیمات چندزبانه', 'Fikup Poly', 'manage_options', 'fikup-poly',
+            [ $this, 'render_settings_page' ], 'dashicons-translation', 80
         );
     }
 
     public function register_settings() {
-        // تنظیمات اصلی
         register_setting( 'fikup_poly_general_group', 'fikup_woodmart_header_id' );
         register_setting( 'fikup_poly_general_group', 'fikup_woodmart_footer_id' );
         register_setting( 'fikup_poly_general_group', 'fikup_enable_stock_sync' );
         register_setting( 'fikup_poly_general_group', 'fikup_custom_css_en' );
 
-        // لیست ترجمه‌های هوشمند
+        // حلقه ترجمه (مشابه ووکامرس فارسی)
         register_setting( 'fikup_poly_strings_group', 'fikup_translations_list', [ 
             'type' => 'array',
             'sanitize_callback' => [ $this, 'sanitize_translations' ]
@@ -40,8 +34,8 @@ class Fikup_Poly_Settings {
             foreach ( $input as $item ) {
                 if ( ! empty( $item['key'] ) ) {
                     $clean[] = [
-                        'key' => sanitize_text_field( $item['key'] ), // متن موجود (فارسی یا انگلیسی)
-                        'val' => wp_kses_post( $item['val'] ) // ترجمه (انگلیسی)
+                        'key' => sanitize_text_field( $item['key'] ), // متن اصلی
+                        'val' => wp_kses_post( $item['val'] ) // ترجمه
                     ];
                 }
             }
@@ -77,22 +71,10 @@ class Fikup_Poly_Settings {
     private function render_general_tab() {
         ?>
         <table class="form-table">
-            <tr>
-                <th scope="row">شناسه هدر انگلیسی</th>
-                <td><input type="text" name="fikup_woodmart_header_id" value="<?php echo esc_attr( get_option('fikup_woodmart_header_id') ); ?>" class="regular-text"></td>
-            </tr>
-            <tr>
-                <th scope="row">شناسه فوتر انگلیسی</th>
-                <td><input type="text" name="fikup_woodmart_footer_id" value="<?php echo esc_attr( get_option('fikup_woodmart_footer_id') ); ?>" class="regular-text"></td>
-            </tr>
-            <tr>
-                <th scope="row">سینک موجودی</th>
-                <td><label><input type="checkbox" name="fikup_enable_stock_sync" value="1" <?php checked( get_option('fikup_enable_stock_sync'), 1 ); ?>> فعال‌سازی</label></td>
-            </tr>
-            <tr>
-                <th scope="row">CSS اختصاصی (EN)</th>
-                <td><textarea name="fikup_custom_css_en" rows="10" class="large-text code"><?php echo esc_textarea( get_option('fikup_custom_css_en') ); ?></textarea></td>
-            </tr>
+            <tr><th scope="row">شناسه هدر انگلیسی</th><td><input type="text" name="fikup_woodmart_header_id" value="<?php echo esc_attr( get_option('fikup_woodmart_header_id') ); ?>" class="regular-text"></td></tr>
+            <tr><th scope="row">شناسه فوتر انگلیسی</th><td><input type="text" name="fikup_woodmart_footer_id" value="<?php echo esc_attr( get_option('fikup_woodmart_footer_id') ); ?>" class="regular-text"></td></tr>
+            <tr><th scope="row">سینک موجودی</th><td><label><input type="checkbox" name="fikup_enable_stock_sync" value="1" <?php checked( get_option('fikup_enable_stock_sync'), 1 ); ?>> فعال‌سازی</label></td></tr>
+            <tr><th scope="row">CSS اختصاصی (EN)</th><td><textarea name="fikup_custom_css_en" rows="10" class="large-text code"><?php echo esc_textarea( get_option('fikup_custom_css_en') ); ?></textarea></td></tr>
         </table>
         <?php
     }
@@ -102,16 +84,12 @@ class Fikup_Poly_Settings {
         ?>
         <div class="notice inline notice-info">
             <p><strong>راهنما:</strong> در اینجا می‌توانید هر متنی که در سایت (حالت انگلیسی) نمایش داده می‌شود را تغییر دهید.</p>
-            <p>این سیستم دقیقاً مثل "حلقه ترجمه" ووکامرس فارسی عمل می‌کند. کافیست <strong>متن موجود</strong> (چه فارسی باشد چه انگلیسی) را در ستون اول و <strong>ترجمه دلخواه</strong> را در ستون دوم بنویسید.</p>
+            <p>کافیست <strong>متن موجود</strong> (چه فارسی باشد چه انگلیسی) را در ستون اول و <strong>ترجمه دلخواه</strong> را در ستون دوم بنویسید.</p>
         </div>
         <div id="strings-wrapper">
             <table class="widefat fixed striped" style="max-width: 1000px;">
                 <thead>
-                    <tr>
-                        <th style="width: 45%;">متن اصلی (موجود در سایت)</th>
-                        <th style="width: 45%;">جایگزین (در حالت انگلیسی)</th>
-                        <th style="width: 50px;">حذف</th>
-                    </tr>
+                    <tr><th style="width: 45%;">متن اصلی (موجود در سایت)</th><th style="width: 45%;">جایگزین (در حالت انگلیسی)</th><th style="width: 50px;">حذف</th></tr>
                 </thead>
                 <tbody id="strings-list">
                     <?php 
@@ -128,8 +106,8 @@ class Fikup_Poly_Settings {
         
         <script type="text/template" id="tmpl-row">
             <tr>
-                <td><input type="text" name="fikup_translations_list[INDEX][key]" class="widefat" placeholder="مثال: سبد خرید خالی است"></td>
-                <td><input type="text" name="fikup_translations_list[INDEX][val]" class="widefat" placeholder="مثال: Your cart is empty"></td>
+                <td><input type="text" name="fikup_translations_list[INDEX][key]" class="widefat" placeholder="مثال: تومان"></td>
+                <td><input type="text" name="fikup_translations_list[INDEX][val]" class="widefat" placeholder="مثال: Toman"></td>
                 <td><button type="button" class="button remove-row" style="color: #a00;">X</button></td>
             </tr>
         </script>
